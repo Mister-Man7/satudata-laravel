@@ -1,8 +1,12 @@
-<title>{{ $title ?? 'SATUDATA UNTIRTA' }}</title>
 <x-layout>
     <x-slot:title>
-        {{ $title }}
+        {{ $title ?? 'Akademik' }}
     </x-slot:title>
+
+    @php
+        $daftarStatistik = $stats ?? [];
+    @endphp
+
     <section class="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
         <div class="mb-8">
             <div
@@ -20,7 +24,7 @@
         </div>
 
         <div class="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
-            @foreach ($stats as $stat)
+            @forelse ($daftarStatistik as $stat)
                 <x-ui.akademik-card
                     :title="$stat['title']"
                     :value="$stat['value']"
@@ -30,7 +34,11 @@
                     :icon-bg="$stat['iconBg']"
                     :icon-color="$stat['iconColor']"
                 />
-            @endforeach
+            @empty
+                <div class="rounded-2xl border border-amber-200 bg-amber-50 p-5 text-sm font-semibold text-amber-700">
+                    Data akademik belum siap ditampilkan.
+                </div>
+            @endforelse
         </div>
     </section>
 </x-layout>
