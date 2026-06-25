@@ -1,3 +1,4 @@
+<title>{{ $title ?? 'SATUDATA UNTIRTA' }}</title>
 <x-layout>
     <x-slot:title>
         {{ $title }}

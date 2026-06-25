@@ -35,4 +35,9 @@ return [
         ],
     ],
 
+    'siakang' => [
+        'base_url' => env('SIAKANG_API_BASE_URL'),
+        'token' => env('SIAKANG_API_TOKEN'),
+    ],
+
 ];
