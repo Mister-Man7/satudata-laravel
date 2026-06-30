@@ -35,6 +35,8 @@ class AkademikController extends Controller
                 'iconBg' => 'bg-green-50',
                 'iconColor' => 'text-green-600',
                 'iconClass' => 'fa-solid fa-user-check',
+                'description' => 'Data mahasiswa aktif akan mengikuti integrasi akademik berikutnya.',
+                'status' => 'Belum tersedia',
             ],
             [
                 'title' => 'Mahasiswa Tidak Aktif',
@@ -44,6 +46,8 @@ class AkademikController extends Controller
                 'iconBg' => 'bg-gray-50',
                 'iconColor' => 'text-gray-600',
                 'iconClass' => 'fa-solid fa-user-clock',
+                'description' => 'Ringkasan mahasiswa nonaktif akan ditampilkan saat data tersedia.',
+                'status' => 'Belum tersedia',
             ],
             [
                 'title' => 'Mahasiswa Lulus',
@@ -53,6 +57,8 @@ class AkademikController extends Controller
                 'iconBg' => 'bg-teal-50',
                 'iconColor' => 'text-teal-600',
                 'iconClass' => 'fa-solid fa-user-graduate',
+                'description' => 'Total mahasiswa lulus dari integrasi SIAKANG.',
+                'status' => $statusLulusan,
             ],
             [
                 'title' => 'Mahasiswa Baru',
@@ -62,6 +68,8 @@ class AkademikController extends Controller
                 'iconBg' => 'bg-blue-50',
                 'iconColor' => 'text-blue-600',
                 'iconClass' => 'fa-solid fa-user-plus',
+                'description' => 'Data mahasiswa baru akan mengikuti integrasi akademik berikutnya.',
+                'status' => 'Belum tersedia',
             ],
         ];
 

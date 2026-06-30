@@ -6,6 +6,8 @@
     'iconBg' => 'bg-blue-50',
     'iconColor' => 'text-blue-600',
     'iconClass' => 'fa-solid fa-clock',
+    'description' => null,
+    'status' => null,
 ])
 
 <div
@@ -23,6 +25,12 @@
                     {{ number_format($value, 0, ',', '.') }}
                 @endif
             </h3>
+
+            @if ($description)
+                <p class="mt-3 text-sm leading-6 text-white/75">
+                    {{ $description }}
+                </p>
+            @endif
         </div>
 
         <div
@@ -40,5 +48,11 @@
             class="mt-5 inline-flex items-center gap-2 text-sm font-bold text-white/50 hover:text-white">
             Lihat detail <span aria-hidden="true">→</span>
         </a>
+    @endif
+
+    @if ($status)
+        <div class="mt-5 inline-flex rounded-full bg-emerald-50 px-3 py-1 text-xs font-bold text-emerald-700">
+            {{ $status }}
+        </div>
     @endif
 </div>

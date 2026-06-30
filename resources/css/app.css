@@ -22,3 +22,86 @@
     --color-blue-custom-500: #157FFB;
     --color-blue-custom-600: #0E66D1;
 }
+
+/* TirtaAgent Chat Markdown Styling */
+.tirta-markdown-content p {
+    margin-bottom: 0.75rem;
+}
+.tirta-markdown-content p:last-child {
+    margin-bottom: 0;
+}
+.tirta-markdown-content ul {
+    list-style-type: disc;
+    margin-left: 1.25rem;
+    margin-bottom: 0.75rem;
+}
+.tirta-markdown-content ol {
+    list-style-type: decimal;
+    margin-left: 1.25rem;
+    margin-bottom: 0.75rem;
+}
+.tirta-markdown-content li {
+    margin-bottom: 0.25rem;
+}
+.tirta-markdown-content li::marker {
+    color: #06b6d4; /* cyan-500 */
+}
+.tirta-markdown-content strong {
+    font-weight: 700;
+    color: #0f172a; /* slate-900 */
+}
+.tirta-markdown-content a {
+    color: #0891b2; /* cyan-600 */
+    text-decoration: underline;
+    font-weight: 600;
+}
+.tirta-markdown-content a:hover {
+    color: #0e7490; /* cyan-700 */
+}
+.tirta-markdown-content table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 0.75rem;
+    margin-bottom: 0.75rem;
+    font-size: 0.8125rem;
+    line-height: 1.25rem;
+}
+.tirta-markdown-content th {
+    background-color: #f1f5f9; /* slate-100 */
+    border: 1px solid #e2e8f0; /* slate-200 */
+    padding: 0.5rem;
+    font-weight: 700;
+    text-align: left;
+    color: #334155; /* slate-700 */
+}
+.tirta-markdown-content td {
+    border: 1px solid #e2e8f0; /* slate-200 */
+    padding: 0.5rem;
+    color: #475569; /* slate-600 */
+}
+.tirta-markdown-content tr:nth-child(even) {
+    background-color: #f8fafc; /* slate-50 */
+}
+.tirta-markdown-content code {
+    background-color: #f1f5f9; /* slate-100 */
+    padding: 0.125rem 0.25rem;
+    border-radius: 0.25rem;
+    font-family: monospace;
+    font-size: 0.875em;
+    color: #0f172a; /* slate-900 */
+}
+.tirta-markdown-content pre {
+    background-color: #0f172a; /* slate-900 */
+    color: #f8fafc; /* slate-50 */
+    padding: 1rem;
+    border-radius: 0.5rem;
+    overflow-x: auto;
+    margin-top: 0.75rem;
+    margin-bottom: 0.75rem;
+}
+.tirta-markdown-content pre code {
+    background-color: transparent;
+    padding: 0;
+    color: inherit;
+    font-size: inherit;
+}

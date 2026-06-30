@@ -11,6 +11,7 @@
     "require": {
         "php": "^8.3",
         "guzzlehttp/guzzle": "^7.12",
+        "laravel/ai": "^0.8.1",
         "laravel/framework": "^13.8",
         "laravel/tinker": "^3.0",
         "livewire/livewire": "^4.3"
