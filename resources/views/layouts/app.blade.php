@@ -8,6 +8,8 @@
 
         @vite(['resources/css/app.css', 'resources/js/app.js'])
 
+        <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+
         @livewireStyles
     </head>
     <body>

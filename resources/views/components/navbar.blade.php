@@ -17,6 +17,16 @@
         </div>
         <div class="hidden md:block">
         <div class="ml-4 flex items-center md:ml-6">
+            <button
+                type="button"
+                class="mr-3 flex h-10 w-10 items-center justify-center rounded-full text-gray-300 transition hover:bg-white/10 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-400"
+                data-tirta-chat-open
+                aria-label="Buka TirtaAgent"
+                title="TirtaAgent"
+            >
+                <i class="fa-solid fa-robot text-base"></i>
+            </button>
+
             <!-- Profile dropdown -->
             <el-dropdown class="relative ml-3">
             <button class="relative flex max-w-xs items-center rounded-full focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-500">
@@ -67,6 +77,15 @@
             <div class="text-base/5 font-medium text-white">Tom Cook</div>
             <div class="text-sm font-medium text-gray-400">tom@example.com</div>
         </div>
+        <button
+            type="button"
+            class="ml-auto flex h-10 w-10 items-center justify-center rounded-full text-gray-300 transition hover:bg-white/10 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-400"
+            data-tirta-chat-open
+            aria-label="Buka TirtaAgent"
+            title="TirtaAgent"
+        >
+            <i class="fa-solid fa-robot text-base"></i>
+        </button>
         </div>
         <div class="mt-3 space-y-1 px-2">
         <a href="#" class="block rounded-md px-3 py-2 text-base font-medium text-gray-400 hover:bg-white/5 hover:text-white">Your profile</a>

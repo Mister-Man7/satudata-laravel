@@ -26,5 +26,7 @@
     <x-footer></x-footer>
 </div>
 
+<x-tirta-agent-chat></x-tirta-agent-chat>
+
 </body>
 </html>
