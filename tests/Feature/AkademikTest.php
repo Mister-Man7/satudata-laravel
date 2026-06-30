@@ -1,7 +1,9 @@
 <?php
 
+use App\Livewire\MahasiswaLulusTable;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Http;
+use Livewire\Livewire;
 
 beforeEach(function () {
     config()->set('services.siakang.base_url', 'https://siakang.test/api');
@@ -22,6 +24,8 @@ test('dashboard akademik menampilkan total mahasiswa lulus dari API', function (
         ->assertOk()
         ->assertSeeText('Mahasiswa Lulus')
         ->assertSeeText('42')
+        ->assertSee('bg-emerald-50')
+        ->assertSeeText('Statistik Mahasiswa')
         ->assertSee(route('akademik.mahasiswa-lulus'));
 
     Http::assertSent(function (Request $request): bool {
@@ -75,6 +79,54 @@ test('halaman detail meneruskan filter dan menampilkan data lulusan', function (
             && $angkatanBenar
             && $tahunLulusBenar
             && $jumlahDataBenar;
+    });
+});
+
+test('livewire mahasiswa lulus dapat pindah halaman pagination', function () {
+    Http::fake(function (Request $request) {
+        $halaman = (int) $request['page'];
+
+        if ($halaman === 2) {
+            return Http::response([
+                'data' => [[
+                    'total' => 50,
+                    'current_page' => 2,
+                    'last_page' => 2,
+                    'data' => [[
+                        'nim' => '3337654321',
+                        'nama' => 'Budi Santoso',
+                        'angkatan' => 2019,
+                        'tanggal_lulus' => '2024-09-10',
+                        'prodi' => ['nama_prodi_lengkap' => 'Sistem Informasi'],
+                    ]],
+                ]],
+            ]);
+        }
+
+        return Http::response([
+            'data' => [[
+                'total' => 50,
+                'current_page' => 1,
+                'last_page' => 2,
+                'data' => [[
+                    'nim' => '3331234567',
+                    'nama' => 'Ayu Lestari',
+                    'angkatan' => 2020,
+                    'tanggal_lulus' => '2024-08-20',
+                    'prodi' => ['nama_prodi_lengkap' => 'Teknik Informatika'],
+                ]],
+            ]],
+        ]);
+    });
+
+    Livewire::test(MahasiswaLulusTable::class)
+        ->assertSee('Ayu Lestari')
+        ->call('nextPage')
+        ->assertSee('Budi Santoso')
+        ->assertDontSee('Ayu Lestari');
+
+    Http::assertSent(function (Request $request): bool {
+        return (int) $request['page'] === 2 && $request['limit'] === 25;
     });
 });
 
