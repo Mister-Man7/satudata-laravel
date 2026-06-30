@@ -6,7 +6,9 @@
     <meta http-equiv="X-UA-Compatible" content="ie=edge">
     <title>{{ $title ?? ucwords(str_replace('-', ' ', request()->segment(count(request()->segments())) ?? 'dashboard')) }}
         | SATUDATA UNTIRTA</title>
+
     <script src="https://cdn.jsdelivr.net/npm/@tailwindplus/elements@1" type="module"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/7.0.1/css/all.min.css">
     @vite(['resources/css/app.css', 'resources/js/app.js'])
 </head>
 <body class="h-full">
@@ -18,10 +20,10 @@
 
     <main>
         <div class="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
-            <!-- Your content -->
             {{ $slot }}
         </div>
     </main>
+    <x-footer></x-footer>
 </div>
 
 </body>

@@ -1,5 +1,13 @@
+import Chart from 'chart.js/auto';
+
 const mobileMenuButton = document.querySelector('[data-mobile-menu-button]');
 const mobileMenu = document.querySelector('[data-mobile-menu]');
+
+window.Chart = Chart;
+
+document.addEventListener('DOMContentLoaded', () => {
+    initStatistikMahasiswaCharts(Chart);
+});
 
 if (mobileMenuButton && mobileMenu) {
     const openIcon = mobileMenuButton.querySelector('[data-menu-open-icon]');
@@ -16,8 +24,8 @@ if (mobileMenuButton && mobileMenu) {
         const isOpen = mobileMenuButton.getAttribute('aria-expanded') === 'true';
 
         mobileMenu.classList.toggle('hidden', isOpen);
-        mobileMenuButton.setAttribute('aria-expanded', String(! isOpen));
-        openIcon?.classList.toggle('hidden', ! isOpen);
+        mobileMenuButton.setAttribute('aria-expanded', String(!isOpen));
+        openIcon?.classList.toggle('hidden', !isOpen);
         closeIcon?.classList.toggle('hidden', isOpen);
     });
 
@@ -27,3 +35,4 @@ if (mobileMenuButton && mobileMenu) {
         }
     });
 }
+
