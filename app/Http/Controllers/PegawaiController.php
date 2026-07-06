@@ -99,9 +99,16 @@ class PegawaiController extends Controller
                 hasilApi: $this->pegawaiService->getData($this->parameterStatusKerja(20)),
             ),
         ];
+        $levelPegawai = [
+            $this->formatCard('Tendik', $this->pegawaiService->getData(['count' => 1, 'level_pegawai' => 2])),
+            $this->formatCard('Dosen', $this->pegawaiService->getData(['count' => 1, 'level_pegawai' => 3])),
+            $this->formatCard('Dosen DT', $this->pegawaiService->getData(['count' => 1, 'level_pegawai' => 7])),
+            $this->formatCard('Dosen Luar Biasa', $this->pegawaiService->getData(['count' => 1, 'level_pegawai' => 13])),
+        ];
+        $guruBesarApi = $this->pegawaiService->getData(['count' => 1, 'jabatan' => 44]);
+        $guruBesar = ($guruBesarApi['status'] ?? false) ? (int)($guruBesarApi['total'] ?? 0) : 0;
 
-
-        return view('pegawai', compact('statusPegawai','datas'));
+        return view('pegawai', compact('statusPegawai', 'datas', 'levelPegawai', 'guruBesar'));
     }
 
     private function statistikStatusKerja(string $title, array $hasilApi): array
@@ -305,6 +312,58 @@ class PegawaiController extends Controller
 
             'iconBg' => $style['iconBg'],
             'iconColor' => $style['iconColor'],
+        ];
+    }
+
+    private function formatCard(string $title, array $hasilApi): array
+    {
+        $styles = [
+            'Tendik' => [
+                'bg' => 'bg-emerald-600',
+                'iconBg' => 'bg-emerald-100',
+                'iconColor' => 'text-emerald-700',
+                'icon' => 'fa-solid fa-users-gear',
+                'textColor' => 'text-white',
+            ],
+            'Dosen' => [
+                'bg' => 'bg-blue-600',
+                'iconBg' => 'bg-blue-100',
+                'iconColor' => 'text-blue-700',
+                'icon' => 'fa-solid fa-chalkboard-user',
+                'textColor' => 'text-white',
+            ],
+            'Dosen DT' => [
+                'bg' => 'bg-indigo-600',
+                'iconBg' => 'bg-indigo-100',
+                'iconColor' => 'text-indigo-700',
+                'icon' => 'fa-solid fa-user-tie',
+                'textColor' => 'text-white',
+            ],
+            'Dosen Luar Biasa' => [
+                'bg' => 'bg-purple-600',
+                'iconBg' => 'bg-purple-100',
+                'iconColor' => 'text-purple-700',
+                'icon' => 'fa-solid fa-briefcase',
+                'textColor' => 'text-white',
+            ],
+        ];
+        
+        $style = $styles[$title] ?? [
+            'bg' => 'bg-slate-600',
+            'iconBg' => 'bg-slate-100',
+            'iconColor' => 'text-slate-700',
+            'icon' => 'fa-solid fa-user-graduate',
+            'textColor' => 'text-white',
+        ];
+
+        return [
+            'label' => $title,
+            'value' => ($hasilApi['status'] ?? false) ? (int)($hasilApi['total'] ?? 0) : 0,
+            'bg' => $style['bg'],
+            'iconBg' => $style['iconBg'],
+            'iconColor' => $style['iconColor'],
+            'icon' => $style['icon'],
+            'textColor' => $style['textColor'],
         ];
     }
 }
