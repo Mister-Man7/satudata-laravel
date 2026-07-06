@@ -34,22 +34,16 @@
     </div>
     <div class="grid grid-cols-1 lg:grid-cols-12 gap-4 auto-rows-[185px]">
         @foreach ($stats as $stat)
-
             @php
                 $span = $stat['span'] ?? 'lg:col-span-3';
                 $bg = $stat['bg'] ?? 'bg-violet-600';
                 $text = $stat['text'] ?? 'text-white';
                 $icon = $stat['icon'] ?? 'fa-solid fa-users';
             @endphp
-
-            <button
-                type="button"
+            <button type="button"
                 class="{{ $span }} {{ $bg }} {{ $text }} group relative overflow-hidden rounded-[28px] p-6 text-left shadow-lg transition-all duration-300 hover:-translate-y-0.5 hover:shadow-xl">
-
                 <div class="absolute -right-10 -top-5 h-40 w-40 rounded-full bg-white/10 blur-2xl"></div>
-
                 <div class="relative flex h-full flex-col justify-between">
-
                     <div>
                         <div class="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/15">
                             <i class="{{ $icon }}"></i>
@@ -59,21 +53,16 @@
                             {{ $stat['label'] ?? '-' }}
                         </h3>
                     </div>
-
                     <div>
                         <div class="text-4xl font-black">
                             {{ number_format($stat['value'] ?? 0, 0, ',', '.') }}
                         </div>
-
                         <div class="text-sm opacity-80">
                             Pegawai
                         </div>
                     </div>
-
                 </div>
-
             </button>
-
         @endforeach
     </div>
 </section>
