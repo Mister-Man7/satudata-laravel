@@ -101,7 +101,7 @@ class PegawaiController extends Controller
         ];
 
 
-        return view('pegawai', compact('datas'));
+        return view('pegawai', compact('statusPegawai','datas'));
     }
 
     private function statistikStatusKerja(string $title, array $hasilApi): array
