@@ -43,9 +43,9 @@
                 <div
                     class="mb-5 flex flex-col gap-3 border-b border-slate-100 pb-4 sm:flex-row sm:items-end sm:justify-between">
                     <div>
-                        <h3 class="text-lg text-center font-bold tracking-tight text-slate-900 sm:text-xl">
+                        {{-- <h3 class="text-lg text-center font-bold tracking-tight text-slate-900 sm:text-xl">
                             Total Mahasiswa
-                        </h3>
+                        </h3> --}}
                     </div>
                 </div>
                 <div class="h-[420px] w-full">
