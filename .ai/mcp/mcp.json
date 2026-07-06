@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "laravel-boost": {
+      "command": "/usr/bin/php8.4",
+      "args": [
+        "/home/estan/Documents/Belajar/Laravel/satudata-laravel/artisan",
+        "boost:mcp"
+      ]
+    }
+  }
+}

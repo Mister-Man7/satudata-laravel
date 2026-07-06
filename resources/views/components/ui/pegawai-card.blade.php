@@ -9,13 +9,12 @@
 ])
 
 <div
-    {{ $attributes->merge(['class' => 'group rounded-2xl border border-gray-200 ' . $cardBg . ' p-5 shadow-sm transition hover:-translate-y-1 hover:shadow-md']) }}>
+    {{ $attributes->merge(['class' => 'group rounded-2xl border border-gray-200 ' . $cardBg . ' p-5 shadow-sm transition ']) }}>
     <div class="flex items-start justify-between gap-2">
         <div class="min-w-0">
             <p class="text-sm font-semibold text-white/50">
                 {{ $title }}
             </p>
-
             <h3 class="mt-3 text-3xl font-extrabold tracking-tight text-white">
                 @if ($value === null)
                     —

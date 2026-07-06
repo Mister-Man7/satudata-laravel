@@ -23,6 +23,43 @@
     --color-blue-custom-600: #0E66D1;
 }
 
+/* TirtaAgent Chat UI */
+.tirta-quick-prompts {
+    scrollbar-width: none;
+}
+.tirta-quick-prompts::-webkit-scrollbar {
+    display: none;
+}
+.tirta-typing-dots {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+}
+.tirta-typing-dots span {
+    width: 0.375rem;
+    height: 0.375rem;
+    border-radius: 9999px;
+    background-color: #0891b2;
+    opacity: 0.35;
+    animation: tirtaTypingPulse 1s ease-in-out infinite;
+}
+.tirta-typing-dots span:nth-child(2) {
+    animation-delay: 0.15s;
+}
+.tirta-typing-dots span:nth-child(3) {
+    animation-delay: 0.3s;
+}
+@keyframes tirtaTypingPulse {
+    0%, 80%, 100% {
+        transform: translateY(0);
+        opacity: 0.35;
+    }
+    40% {
+        transform: translateY(-0.1875rem);
+        opacity: 1;
+    }
+}
+
 /* TirtaAgent Chat Markdown Styling */
 .tirta-markdown-content p {
     margin-bottom: 0.75rem;

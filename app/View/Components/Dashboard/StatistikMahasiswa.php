@@ -23,13 +23,13 @@ class StatistikMahasiswa extends Component
     public array $chartPayload;
 
     public function __construct(
-        string $title = 'Statistik Mahasiswa',
+        string $title = 'Total Mahasiswa',
         string $subtitle = 'Ringkasan mahasiswa per fakultas dengan filter tahun akademik, semester, dan fakultas.'
     ) {
         $this->title = $title;
         $this->subtitle = $subtitle;
         $this->academicYears = ['2024/2025', '2023/2024', '2022/2023'];
-        $this->semesters = ['Ganjil', 'Genap', 'Pendek'];
+        $this->semesters = ['Ganjil', 'Genap', 'Antara'];
         $this->faculties = ['Semua Fakultas', 'FKIP', 'FEB', 'FT', 'FISIP', 'FH', 'FP', 'FK'];
         $this->summaryCards = $this->buildSummaryCards();
         $this->chartPayload = [
