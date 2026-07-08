@@ -39,11 +39,17 @@ return [
         'base_url' => env('SIAKANG_API_BASE_URL'),
         'token' => env('SIAKANG_API_TOKEN'),
     ],
-    
+
     'simpeg' => [
         'base_url' => env('SIMPEG_API_BASE_URL'),
         'key' => env('SIMPEG_API_KEY', 'simpeg2023'),
         'value' => env('SIMPEG_API_VALUE'),
     ],
 
+    'simantap' => [
+        'base_url' => env('SIMANTAP_API_BASE_URL'),
+        'token' => env('SIMANTAP_API_TOKEN'),
+        'email' => env('SIMANTAP_API_EMAIL'),
+        'password' => env('SIMANTAP_API_PASSWORD'),
+    ],
 ];

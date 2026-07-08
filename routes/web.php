@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\AkademikController;
+use App\Http\Controllers\AsetController;
 use App\Http\Controllers\PegawaiController;
 use App\Http\Controllers\TirtaAgentController;
 use Illuminate\Support\Facades\Route;
@@ -15,8 +16,11 @@ Route::get('/akademik', [AkademikController::class, 'index'])
 Route::get('/akademik/mahasiswa-lulus', [AkademikController::class, 'mahasiswaLulus'])
     ->name('akademik.mahasiswa-lulus');
 
-Route::get('/aset', function () {
-    return view('aset', ['title' => 'Aset']);
+Route::prefix('aset')->name('aset.')->group(function () {
+    Route::get('/', [AsetController::class, 'index'])->name('index');
+    Route::get('/kampus/{kampusId}/gedung', [AsetController::class, 'gedung'])->name('gedung');
+    Route::get('/gedung/{gedungId}/ruangan', [AsetController::class, 'ruangan'])->name('ruangan');
+    Route::get('/ruangan/{ruanganId}/bmn', [AsetController::class, 'bmn'])->name('bmn');
 });
 
 Route::get('/pegawai', [PegawaiController::class, 'index'])
@@ -28,6 +32,3 @@ Route::get('/infrastruktur', function () {
 
 Route::post('/chat', [TirtaAgentController::class, 'chat'])
     ->name('tirta-agent.chat');
-
-Route::get('/pegawai-tes', [PegawaiController::class, 'getApiData'])
-    ->name('pegawai.tes');
