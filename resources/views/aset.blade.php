@@ -2,5 +2,5 @@
     <x-slot:title>
         {{ $title }}
     </x-slot:title>
-    <h3>Ini adalah halaman Aset</h3>
+    <x-ui.aset-card :datas="$datas" :level="$level ?? 'bmn'"></x-ui.aset-card>
 </x-layout>
