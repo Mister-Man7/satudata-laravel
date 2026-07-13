@@ -49,12 +49,18 @@ class SimantapService
             $response = Http::withToken($newToken)->acceptJson()->{$method}("{$this->baseUrl}/{$endpoint}", $queryParams);
         }
 
-
-        if ($response->json() === null) {
+        if (!$response->successful() || $response->json() === null) {
+            $errorMsg = match ($response->status()) {
+                429 => "Server API memblokir request karena kamu terlalu cepat me-refresh (Rate Limit). Tunggu sebentar lalu coba lagi.",
+                500, 502, 503, 504 => "Server API Simantap sedang down atau terlalu berat. Coba lagi nanti.",
+                404 => "Endpoint API tidak ditemukan.",
+                default => "Terjadi masalah tidak dikenal dengan API."
+            };
             dd([
-                'url_yg_ditembak' => "{$this->baseUrl}/{$endpoint}",
-                'status_code' => $response->status(),
-                'isi_balasan' => $response->body() // Menampilkan pesan error asli (mungkin HTML/Teks)
+                'KETERANGAN' => $errorMsg,
+                'STATUS' => $response->status(),
+                'URL' => "{$this->baseUrl}/{$endpoint}",
+                'RESPONSE' => $response->body()
             ]);
         }
 

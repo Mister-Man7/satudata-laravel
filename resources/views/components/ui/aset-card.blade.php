@@ -39,7 +39,7 @@
                             {{ $card['title'] }}
                         </h3>
 
-                        <div class="text-[#f57c00]">
+                        <div class="text-[#30A64A]">
                             @if($card['icon'] === 'building')
                                 <i class="fa-solid fa-map text-2xl"></i>
                             @elseif($card['icon'] === 'office')
@@ -60,7 +60,7 @@
                                 <i class="fa-solid fa-car text-2xl"></i>
                             @else
                                 <div
-                                    class="w-8 h-8 rounded-full bg-[#f57c00] text-white flex items-center justify-center text-xs font-medium">
+                                    class="w-8 h-8 rounded-full bg-[#30A64A] text-white flex items-center justify-center text-xs font-medium">
                                     ic
                                 </div>
                             @endif

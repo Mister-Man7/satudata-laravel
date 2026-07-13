@@ -29,43 +29,43 @@ class SearchGraduates implements Tool
         $parameter = [];
 
         if (filled($arguments['search'] ?? null)) {
-            $parameter['search'] = (string) $arguments['search'];
+            $parameter['search'] = (string)$arguments['search'];
         }
 
         if (filled($arguments['kode_prodi'] ?? null)) {
-            $parameter['kode_prodi'] = (string) $arguments['kode_prodi'];
+            $parameter['kode_prodi'] = (string)$arguments['kode_prodi'];
         }
 
         if (filled($arguments['angkatan'] ?? null)) {
-            $parameter['angkatan'] = (int) $arguments['angkatan'];
+            $parameter['angkatan'] = (int)$arguments['angkatan'];
         }
 
         if (filled($arguments['tahun_lulus'] ?? null)) {
-            $parameter['tahun_lulus'] = (int) $arguments['tahun_lulus'];
+            $parameter['tahun_lulus'] = (int)$arguments['tahun_lulus'];
         }
 
         if (filled($arguments['fakultas'] ?? null)) {
-            return $this->handleFacultySummary($lulusanService, $parameter, (string) $arguments['fakultas']);
+            return $this->handleFacultySummary($lulusanService, $parameter, (string)$arguments['fakultas']);
         }
 
         if (filled($arguments['page'] ?? null)) {
-            $parameter['page'] = (int) $arguments['page'];
+            $parameter['page'] = (int)$arguments['page'];
         } else {
             $parameter['page'] = 1;
         }
 
         $parameter['limit'] = 10; // limit to 10 for chatbot usage to keep token size reasonable
 
-        $hasilApi = $lulusanService->ambilData($parameter);
+        $hasilApi = $lulusanService->getData($parameter);
 
-        if (! $hasilApi['tersedia']) {
+        if (!$hasilApi['tersedia']) {
             return json_encode([
                 'error' => 'API SIAKANG tidak tersedia untuk melakukan pencarian lulusan saat ini.',
             ]);
         }
 
         // Clean up the data returned to only essential fields to save token space
-        $daftarMahasiswa = collect($hasilApi['data'])->map(fn ($mhs) => [
+        $daftarMahasiswa = collect($hasilApi['data'])->map(fn($mhs) => [
             'nama' => $mhs['nama'] ?? null,
             'nim' => $mhs['nim'] ?? $mhs['npm'] ?? null,
             'prodi' => data_get($mhs, 'prodi.nama_prodi_lengkap') ?? data_get($mhs, 'prodi.nama_prodi'),
@@ -99,7 +99,7 @@ class SearchGraduates implements Tool
     }
 
     /**
-     * @param  array<string, int|string>  $parameter
+     * @param array<string, int|string> $parameter
      */
     private function handleFacultySummary(SiakangLulusanService $lulusanService, array $parameter, string $facultyQuery): Stringable|string
     {
@@ -118,13 +118,13 @@ class SearchGraduates implements Tool
         $lastPage = 1;
 
         do {
-            $hasilApi = $lulusanService->ambilData([
+            $hasilApi = $lulusanService->getData([
                 ...$parameter,
                 'limit' => 1000,
                 'page' => $page,
             ]);
 
-            if (! $hasilApi['tersedia']) {
+            if (!$hasilApi['tersedia']) {
                 return json_encode([
                     'error' => 'API SIAKANG tidak tersedia untuk menghitung lulusan fakultas saat ini.',
                     'fakultas' => $faculty['name'],
@@ -136,17 +136,17 @@ class SearchGraduates implements Tool
                 ...$allGraduates,
                 ...$hasilApi['data'],
             ];
-            $lastPage = max(1, (int) $hasilApi['halaman_terakhir']);
+            $lastPage = max(1, (int)$hasilApi['halaman_terakhir']);
             $page++;
         } while ($page <= $lastPage);
 
         $facultyCodes = array_map('strval', $faculty['kode_prodi']);
         $graduates = collect($allGraduates)
-            ->filter(fn (array $graduate): bool => in_array((string) data_get($graduate, 'prodi.kode_prodi'), $facultyCodes, true));
+            ->filter(fn(array $graduate): bool => in_array((string)data_get($graduate, 'prodi.kode_prodi'), $facultyCodes, true));
 
         $byProgram = $graduates
-            ->groupBy(fn (array $graduate): string => (string) (data_get($graduate, 'prodi.nama_prodi') ?? 'Prodi tidak diketahui'))
-            ->map(fn ($items, string $program): array => [
+            ->groupBy(fn(array $graduate): string => (string)(data_get($graduate, 'prodi.nama_prodi') ?? 'Prodi tidak diketahui'))
+            ->map(fn($items, string $program): array => [
                 'prodi' => $program,
                 'jumlah_lulus' => $items->count(),
             ])
@@ -179,7 +179,7 @@ class SearchGraduates implements Tool
 
         foreach ($this->facultyCatalog() as $faculty) {
             $matches = collect([$faculty['name'], ...$faculty['aliases']])
-                ->contains(fn (string $alias): bool => str_contains($normalizedQuery, $this->normalizeText($alias)));
+                ->contains(fn(string $alias): bool => str_contains($normalizedQuery, $this->normalizeText($alias)));
 
             if ($matches) {
                 return $faculty;

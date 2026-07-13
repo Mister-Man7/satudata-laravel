@@ -11,26 +11,26 @@
 
     <script src="https://cdn.jsdelivr.net/npm/@tailwindplus/elements@1" type="module"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/7.0.1/css/all.min.css">
-    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    {{--    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>--}}
     @vite(['resources/css/app.css', 'resources/js/app.js'])
 </head>
 
 <body class="h-full">
 
-    <div class="min-h-full">
-        <x-navbar></x-navbar>
+<div class="min-h-full">
+    <x-navbar></x-navbar>
 
-        <x-header>{{ $title }}</x-header>
+    <x-header>{{ $title }}</x-header>
 
-        <main>
-            <div class="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
-                {{ $slot }}
-            </div>
-        </main>
-        <x-footer></x-footer>
-    </div>
+    <main>
+        <div class="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
+            {{ $slot }}
+        </div>
+    </main>
+    <x-footer></x-footer>
+</div>
 
-    <x-tirta-agent-chat></x-tirta-agent-chat>
+<x-tirta-agent-chat></x-tirta-agent-chat>
 
 </body>
 

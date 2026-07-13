@@ -5,9 +5,12 @@ namespace App\Services;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Facades\Http;
 
-class SiakangLulusanService
+class SiakangMahasiswaAktifService
 {
-
+    /**
+     * @param array<string, int|string> $parameter
+     * @return array<string, mixed>
+     */
     public function getData(array $parameter): array
     {
         $baseUrl = config('services.siakang.base_url');
@@ -21,7 +24,7 @@ class SiakangLulusanService
             return $this->hasilKosong();
         }
 
-        $url = rtrim($baseUrl, '/') . '/v2/mahasiswa/lulusan';
+        $url = rtrim($baseUrl, '/') . '/v2/mahasiswa-aktif';
 
         try {
             $response = Http::connectTimeout(5)
@@ -39,29 +42,22 @@ class SiakangLulusanService
             return $this->hasilKosong();
         }
 
-        if (!$response->successful()) {
+        if (!$response->successful() || $response->json('status') !== '200') {
             return $this->hasilKosong();
         }
 
-        $isiResponse = $response->json();
-        $hasilPagination = data_get($isiResponse, 'data.0');
+        $data = $response->json('data');
 
-        if (!is_array($hasilPagination)) {
+        if (!is_array($data)) {
             return $this->hasilKosong();
         }
-
-        $dataMahasiswa = $hasilPagination['data'] ?? [];
-
-        if (!is_array($dataMahasiswa)) {
-            $dataMahasiswa = [];
-        }
-
         return [
             'tersedia' => true,
-            'data' => $dataMahasiswa,
-            'total' => (int)($hasilPagination['total'] ?? 0),
-            'halaman_sekarang' => (int)($hasilPagination['current_page'] ?? 1),
-            'halaman_terakhir' => (int)($hasilPagination['last_page'] ?? 1),
+            'total_mahasiswa_aktif' => (int)($data['total_mahasiswa_aktif'] ?? 0),
+            'semester' => $data['semester'] ?? [],
+            'angkatan' => $data['angkatan'] ?? null,
+            'detail_per_fakultas' => is_array($data['detail_per_fakultas'] ?? null) ? $data['detail_per_fakultas'] : [],
+            'detail_per_prodi' => is_array($data['detail_per_prodi'] ?? null) ? $data['detail_per_prodi'] : [],
         ];
     }
 
@@ -72,10 +68,11 @@ class SiakangLulusanService
     {
         return [
             'tersedia' => false,
-            'data' => [],
-            'total' => 0,
-            'halaman_sekarang' => 1,
-            'halaman_terakhir' => 1,
+            'total_mahasiswa_aktif' => 0,
+            'semester' => [],
+            'angkatan' => null,
+            'detail_per_fakultas' => [],
+            'detail_per_prodi' => [],
         ];
     }
 }
