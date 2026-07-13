@@ -3,9 +3,9 @@
 namespace App\Ai\Tools;
 
 use App\Services\SiakangLulusanService;
+use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Laravel\Ai\Contracts\Tool;
 use Laravel\Ai\Tools\Request;
-use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Stringable;
 
 class GetAcademicStats implements Tool
@@ -24,7 +24,7 @@ class GetAcademicStats implements Tool
     public function handle(Request $request): Stringable|string
     {
         $lulusanService = app(SiakangLulusanService::class);
-        $hasilApi = $lulusanService->ambilData([
+        $hasilApi = $lulusanService->getData([
             'limit' => 1,
             'page' => 1,
         ]);

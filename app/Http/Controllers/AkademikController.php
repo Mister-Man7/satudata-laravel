@@ -3,40 +3,55 @@
 namespace App\Http\Controllers;
 
 use App\Services\SiakangLulusanService;
+use App\Services\SiakangMahasiswaAktifService;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
 
 class AkademikController extends Controller
 {
-    public function __construct(public SiakangLulusanService $lulusanService) {}
+    public function __construct(
+        public SiakangLulusanService        $lulusanService,
+        public SiakangMahasiswaAktifService $aktifService
+    )
+    {
+    }
 
     public function index(): View
     {
-
-        $hasilApi = $this->lulusanService->ambilData([
+        $responseLulusan = $this->lulusanService->getData([
             'limit' => 1,
             'page' => 1,
         ]);
 
+        $responseAktif = $this->aktifService->getData([]);
+
         $totalLulusan = null;
         $statusLulusan = 'API tidak tersedia';
 
-        if ($hasilApi['tersedia']) {
-            $totalLulusan = $hasilApi['total'];
+        if ($responseLulusan['tersedia']) {
+            $totalLulusan = $responseLulusan['total'];
             $statusLulusan = 'Tersambung API';
+        }
+
+        $totalAktif = null;
+        $statusAktif = 'API tidak tersedia';
+
+        if ($responseAktif['tersedia']) {
+            $totalAktif = $responseAktif['total_mahasiswa_aktif'];
+            $statusAktif = 'Tersambung API';
         }
 
         $datas = [
             [
                 'title' => 'Mahasiswa Aktif',
-                'value' => null,
+                'value' => $totalAktif,
                 'href' => null,
                 'cardBg' => 'bg-[#30A64A]',
                 'iconBg' => 'bg-green-50',
                 'iconColor' => 'text-green-600',
                 'iconClass' => 'fa-solid fa-user-check',
-                'description' => 'Data mahasiswa aktif akan mengikuti integrasi akademik berikutnya.',
-                'status' => 'Belum tersedia',
+                'description' => 'Total mahasiswa aktif dari integrasi SIAKANG.',
+                'status' => $statusAktif,
             ],
             [
                 'title' => 'Mahasiswa Tidak Aktif',
@@ -73,52 +88,57 @@ class AkademikController extends Controller
             ],
         ];
 
+        // 1. Mapping diubah menggunakan 'nama_fakultas' sebagai key
+        $dataFakultasApi = collect($responseAktif['detail_per_fakultas'] ?? [])
+            ->pluck('jumlah_mahasiswa_aktif', 'nama_fakultas');
+
+        // 2. Cocokkan key persis dengan string 'nama_fakultas' dari API
         $fakultas = [
             [
-                'name' => 'Kedokteran',
-                'total' => 288,
+                'name' => 'Kedokteran dan Ilmu Kesehatan',
+                'total' => $dataFakultasApi->get('Fakultas Kedokteran dan Ilmu Kesehatan', 0),
                 'icon' => 'fa-solid fa-stethoscope',
                 'color' => 'text-blue-600',
             ],
             [
                 'name' => 'Pertanian',
-                'total' => 5114,
+                'total' => $dataFakultasApi->get('Fakultas Pertanian', 0),
                 'icon' => 'fa-solid fa-seedling',
                 'color' => 'text-green-600',
             ],
             [
                 'name' => 'Hukum',
-                'total' => 5985,
+                'total' => $dataFakultasApi->get('Fakultas Hukum', 0),
                 'icon' => 'fa-solid fa-gavel',
                 'color' => 'text-red-600',
             ],
             [
                 'name' => 'Teknik',
-                'total' => 10895,
+                'total' => $dataFakultasApi->get('Fakultas Teknik', 0),
                 'icon' => 'fa-solid fa-gears',
                 'color' => 'text-yellow-500',
             ],
             [
                 'name' => 'Ekonomi dan Bisnis',
-                'total' => 12321,
+                'total' => $dataFakultasApi->get('Fakultas Ekonomi dan Bisnis', 0),
                 'icon' => 'fa-solid fa-briefcase',
                 'color' => 'text-green-500',
             ],
             [
-                'name' => 'Ilmu Sosial & Politik',
-                'total' => 6031,
+                'name' => 'Ilmu Sosial dan Ilmu Politik',
+                'total' => $dataFakultasApi->get('Fakultas Ilmu Sosial dan Ilmu Politik', 0),
                 'icon' => 'fa-solid fa-handshake',
                 'color' => 'text-fuchsia-500',
             ],
             [
                 'name' => 'Keguruan dan Ilmu Pendidikan',
-                'total' => 17229,
+                'total' => $dataFakultasApi->get('Fakultas Keguruan dan Ilmu Pendidikan', 0),
                 'icon' => 'fa-solid fa-person-chalkboard',
                 'color' => 'text-indigo-600',
             ],
             [
                 'name' => 'Pascasarjana',
-                'total' => 1534,
+                'total' => $dataFakultasApi->get('Pascasarjana', 0),
                 'icon' => 'fa-solid fa-graduation-cap',
                 'color' => 'text-violet-600',
             ],
@@ -136,8 +156,8 @@ class AkademikController extends Controller
         $request->validate([
             'search' => ['nullable', 'string', 'max:100'],
             'kode_prodi' => ['nullable', 'string', 'max:20'],
-            'angkatan' => ['nullable', 'integer', 'between:1900,'.(now()->year + 1)],
-            'tahun_lulus' => ['nullable', 'integer', 'between:1900,'.(now()->year + 1)],
+            'angkatan' => ['nullable', 'integer', 'between:1900,' . (now()->year + 1)],
+            'tahun_lulus' => ['nullable', 'integer', 'between:1900,' . (now()->year + 1)],
             'page' => ['nullable', 'integer', 'min:1'],
         ]);
 

@@ -43,7 +43,7 @@ class MahasiswaLulusTable extends Component
 
     public function render(SiakangLulusanService $lulusanService): View
     {
-        $hasilApi = $lulusanService->ambilData($this->parameterApi());
+        $hasilApi = $lulusanService->getData($this->parameterApi());
 
         return view('livewire.mahasiswa-lulus-table', [
             'result' => $hasilApi,
@@ -81,22 +81,22 @@ class MahasiswaLulusTable extends Component
     }
 
     /**
-     * @param  array<string, mixed>  $hasilApi
+     * @param array<string, mixed> $hasilApi
      * @return LengthAwarePaginatorContract<int, mixed>
      */
     private function buatPaginator(array $hasilApi): LengthAwarePaginatorContract
     {
         $dataMahasiswa = $hasilApi['data'] ?? [];
 
-        if (! is_array($dataMahasiswa)) {
+        if (!is_array($dataMahasiswa)) {
             $dataMahasiswa = [];
         }
 
         return new LengthAwarePaginator(
             items: new Collection($dataMahasiswa),
-            total: (int) ($hasilApi['total'] ?? 0),
+            total: (int)($hasilApi['total'] ?? 0),
             perPage: 25,
-            currentPage: (int) ($hasilApi['halaman_sekarang'] ?? $this->getPage()),
+            currentPage: (int)($hasilApi['halaman_sekarang'] ?? $this->getPage()),
             options: [
                 'path' => route('akademik.mahasiswa-lulus'),
                 'pageName' => 'page',
@@ -112,8 +112,8 @@ class MahasiswaLulusTable extends Component
         return [
             'search' => ['nullable', 'string', 'max:100'],
             'kode_prodi' => ['nullable', 'string', 'max:20'],
-            'angkatan' => ['nullable', 'integer', 'between:1900,'.(now()->year + 1)],
-            'tahun_lulus' => ['nullable', 'integer', 'between:1900,'.(now()->year + 1)],
+            'angkatan' => ['nullable', 'integer', 'between:1900,' . (now()->year + 1)],
+            'tahun_lulus' => ['nullable', 'integer', 'between:1900,' . (now()->year + 1)],
         ];
     }
 }
