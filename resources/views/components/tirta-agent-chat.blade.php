@@ -7,7 +7,7 @@
             aria-label="Tutup TirtaAgent"></button>
 
     <aside
-        class="absolute right-0 top-0 flex h-full w-full max-w-[480px] translate-x-full flex-col border-l border-slate-200 bg-white shadow-2xl transition-transform duration-200 sm:right-4 sm:top-4 sm:h-[calc(100%-2rem)] sm:rounded-2xl sm:border sm:shadow-[0_24px_70px_rgba(15,23,42,0.22)]"
+        class="absolute right-0 top-0 flex h-full w-full max-w-120 translate-x-full flex-col border-l border-slate-200 bg-white shadow-2xl transition-transform duration-200 sm:right-4 sm:top-4 sm:h-[calc(100%-2rem)] sm:rounded-2xl sm:border sm:shadow-[0_24px_70px_rgba(15,23,42,0.22)]"
         data-tirta-chat-panel>
         <div class="border-b border-slate-200 bg-slate-950 px-5 py-4 text-white sm:rounded-t-2xl">
             <div class="flex items-start justify-between gap-4">
@@ -96,7 +96,8 @@
                 </div>
             </div>
 
-            <form class="border-t border-slate-200 bg-white p-4 sm:rounded-b-2xl" data-tirta-form>
+            <form class="border-t border-slate-200 bg-white p-4 sm:rounded-b-2xl" data-tirta-form
+                  onsubmit="event.preventDefault();">
                 <div class="flex items-end gap-3">
                     <textarea
                         class="max-h-32 min-h-12 flex-1 resize-none rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm leading-5 text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-cyan-500 focus:bg-white focus:ring-4 focus:ring-cyan-100 disabled:cursor-not-allowed disabled:bg-slate-100"
