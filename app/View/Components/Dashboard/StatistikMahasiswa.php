@@ -13,16 +13,13 @@ class StatistikMahasiswa extends Component
     public string $title;
 
     public string $subtitle;
-
     public array $summaryCards;
-
     public array $academicYears;
-
     public array $semesters;
-
     public array $faculties;
-
     public array $chartPayload;
+    public string $selectedYear;
+    public string $selectedSemester;
 
     public function __construct(
         SiakangMahasiswaAktifService $aktifService,
@@ -34,16 +31,40 @@ class StatistikMahasiswa extends Component
         $this->title = $title;
         $this->subtitle = $subtitle;
 
-        $responseAktif = $aktifService->getData([]);
+        $this->academicYears = ['2025/2026', '2024/2025', '2023/2024', '2022/2023'];
+        $this->semesters = ['Ganjil', 'Genap', 'Antara'];
+
+        $this->selectedYear = request('tahun', '2024/2025');
+        $this->selectedSemester = request('semester', 'Ganjil');
+
+        $tahunAngka = substr($this->selectedYear, 0, 4);
+        $angkaSemester = match ($this->selectedSemester) {
+            'Ganjil' => '1',
+            'Genap' => '2',
+            'Antara' => '3',
+            default => '1',
+        };
+
+        $kodeSemesterApi = $tahunAngka . $angkaSemester;
+
+        $responseAktif = $aktifService->getData([
+            'semester' => $kodeSemesterApi
+        ]);
+
         $responseLulusan = $lulusanService->getData(['limit' => 1, 'page' => 1]);
 
-        $this->academicYears = ['2024/2025', '2023/2024', '2022/2023'];
-        $this->semesters = ['Ganjil', 'Genap', 'Antara'];
-        $this->faculties = ['Semua Fakultas', 'FKIP', 'FEB', 'FT', 'FISIP', 'FH', 'FP', 'FK'];
+        $daftarFakultasApi = ['Semua Fakultas'];
+        $dataFakultas = $responseAktif['detail_per_fakultas'] ?? [];
+        foreach ($dataFakultas as $item) {
+            $namaFak = $item['nama_fakultas'] ?? '';
+            if (empty($namaFak) || str_ireplace(' ', '', $namaFak) === 'Tidakadafakultas' || str_contains(strtolower($namaFak), 'tidak ada')) {
+                continue;
+            }
+            $daftarFakultasApi[] = $namaFak;
+        }
+        $this->faculties = $daftarFakultasApi;
 
-        // 2. Lempar data response ke builder
         $this->summaryCards = $this->buildSummaryCards($responseAktif, $responseLulusan);
-
         $this->chartPayload = [
             'filters' => [
                 'years' => $this->academicYears,
@@ -51,11 +72,10 @@ class StatistikMahasiswa extends Component
                 'faculties' => $this->faculties,
             ],
             'defaultSelection' => [
-                'year' => '2024/2025',
-                'semester' => 'Ganjil',
+                'year' => $this->selectedYear,
+                'semester' => $this->selectedSemester,
                 'faculty' => 'Semua Fakultas',
             ],
-            // 👇 PERBAIKANNYA DI SINI: Masukkan $responseAktif ke dalam kurung!
             'chartCatalog' => $this->buildChartCatalog($responseAktif),
         ];
     }
@@ -73,18 +93,13 @@ class StatistikMahasiswa extends Component
         ]);
     }
 
-    /**
-     * 3. Olah data cards dari API secara dinamis
-     */
     private function buildSummaryCards(array $responseAktif, array $responseLulusan): array
     {
-        // Ambil data aktif dari API (default 0 jika gagal)
+
         $totalAktif = $responseAktif['tersedia'] ? (int)$responseAktif['total_mahasiswa_aktif'] : 0;
 
-        // Ambil data lulusan dari API (default 0 jika gagal)
         $totalLulusan = $responseLulusan['tersedia'] ? (int)$responseLulusan['total'] : 0;
 
-        // Hitung total gabungan (atau sesuaikan dengan rumus bisnis kampusmu)
         $totalMahasiswa = $totalAktif + $totalLulusan;
 
         return [
@@ -102,7 +117,7 @@ class StatistikMahasiswa extends Component
             ],
             [
                 'label' => 'Mahasiswa Baru',
-                'value' => '-', // Bisa diisi nanti kalau ada API mahasiswa baru
+                'value' => '-',
                 'accentBg' => 'bg-green-400/15',
                 'accentText' => 'text-green-500',
             ],
@@ -118,21 +133,52 @@ class StatistikMahasiswa extends Component
     private function buildChartCatalog(array $responseAktif): array
     {
         $dataFakultas = $responseAktif['detail_per_fakultas'] ?? [];
+        $dataProdi = $responseAktif['detail_per_prodi'] ?? [];
 
-        // Kita susun array untuk label grafik (Nama Fakultas) dan datanya (Jumlah Mahasiswa)
         $labels = [];
-        $dataAktif = [];
-
         foreach ($dataFakultas as $item) {
-            // Singkat nama fakultas agar rapi di grafik (misal: "Fakultas Teknik" -> "Teknik")
-            $namaSingkat = str_replace(['Fakultas ', ' dan Ilmu Pendidikan', ' dan Ilmu Kesehatan'], ['', 'KIP', 'K'], $item['nama_fakultas']);
-            $labels[] = $namaSingkat;
-            $dataAktif[] = (int)$item['jumlah_mahasiswa_aktif'];
+            $namaFak = $item['nama_fakultas'] ?? '';
+            if (empty($namaFak) || str_ireplace(' ', '', $namaFak) === 'Tidakadafakultas' || str_contains(strtolower($namaFak), 'tidak ada')) {
+                continue;
+            }
+            $labels[] = $namaFak;
+        }
+
+        $daftarJenjang = ['Diploma 3', 'Sarjana', 'Profesi', 'Magister', 'Doktor'];
+
+        $matriks = [];
+        foreach ($daftarJenjang as $jenjang) {
+            foreach ($labels as $fak) {
+                $matriks[$jenjang][$fak] = 0;
+            }
+        }
+
+        foreach ($dataProdi as $prodi) {
+            $fak = $prodi['fakultas'] ?? '';
+            $jenjang = $prodi['jenjang'] ?? '';
+            $jumlah = (int)($prodi['jumlah_mahasiswa_aktif'] ?? 0);
+
+            if (isset($matriks[$jenjang][$fak])) {
+                $matriks[$jenjang][$fak] += $jumlah;
+            }
+        }
+
+        $datasets = [];
+        foreach ($daftarJenjang as $jenjang) {
+            $dataValues = [];
+            foreach ($labels as $fak) {
+                $dataValues[] = $matriks[$jenjang][$fak];
+            }
+            $datasets[] = [
+                'label' => 'Mahasiswa ' . $jenjang,
+                'data' => $dataValues,
+            ];
         }
 
         return [
             'labels' => $labels,
-            'data' => $dataAktif,
+            'datasets' => $datasets,
+            'raw_prodi' => $dataProdi,
         ];
     }
 }

@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Services\SiakangLulusanService;
 use App\Services\SiakangMahasiswaAktifService;
+use App\Services\SiakangMahasiswaBaruService;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
 
@@ -11,7 +12,8 @@ class AkademikController extends Controller
 {
     public function __construct(
         public SiakangLulusanService        $lulusanService,
-        public SiakangMahasiswaAktifService $aktifService
+        public SiakangMahasiswaAktifService $aktifService,
+        public SiakangMahasiswaBaruService  $baruService,
     )
     {
     }
@@ -25,12 +27,14 @@ class AkademikController extends Controller
 
         $responseAktif = $this->aktifService->getData([]);
 
+        $responseBaru = $this->baruService->getData([]);
+
         $totalLulusan = null;
         $statusLulusan = 'API tidak tersedia';
 
         if ($responseLulusan['tersedia']) {
             $totalLulusan = $responseLulusan['total'];
-            $statusLulusan = 'Tersambung API';
+            $statusLulusan = 'API Tersambung';
         }
 
         $totalAktif = null;
@@ -38,7 +42,15 @@ class AkademikController extends Controller
 
         if ($responseAktif['tersedia']) {
             $totalAktif = $responseAktif['total_mahasiswa_aktif'];
-            $statusAktif = 'Tersambung API';
+            $statusAktif = 'API Tersambung';
+        }
+
+        $totalBaru = null;
+        $statusBaru = 'API tidak tersedia';
+
+        if ($responseBaru['tersedia']) {
+            $totalBaru = $responseBaru['total_mahasiswa_baru'];
+            $statusBaru = 'API Tersambung';
         }
 
         $datas = [
@@ -77,22 +89,20 @@ class AkademikController extends Controller
             ],
             [
                 'title' => 'Mahasiswa Baru',
-                'value' => null,
+                'value' => $totalBaru,
                 'href' => null,
                 'cardBg' => 'bg-[#157FFB]',
                 'iconBg' => 'bg-blue-50',
                 'iconColor' => 'text-blue-600',
                 'iconClass' => 'fa-solid fa-user-plus',
                 'description' => 'Data mahasiswa baru akan mengikuti integrasi akademik berikutnya.',
-                'status' => 'Belum tersedia',
+                'status' => $statusBaru,
             ],
         ];
 
-        // 1. Mapping diubah menggunakan 'nama_fakultas' sebagai key
         $dataFakultasApi = collect($responseAktif['detail_per_fakultas'] ?? [])
             ->pluck('jumlah_mahasiswa_aktif', 'nama_fakultas');
 
-        // 2. Cocokkan key persis dengan string 'nama_fakultas' dari API
         $fakultas = [
             [
                 'name' => 'Kedokteran dan Ilmu Kesehatan',
