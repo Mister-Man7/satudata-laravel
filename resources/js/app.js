@@ -15,116 +15,219 @@ window.initStatistikMahasiswaCharts = function (ChartLibrary) {
     const canvas = root.querySelector('[data-statistik-mahasiswa-chart]');
     const ctx = canvas?.getContext('2d');
 
-    if (!ctx || !chartData) return;
+    if (!ctx || !chartData || !chartData.datasets) return;
 
-    // 1. Palet Warna Gradasi Modern (Vibrant & Colorful)
-    const colorPalettes = [
-        {top: '#3b82f6', bottom: '#1d4ed8'}, // Blue
-        {top: '#10b981', bottom: '#047857'}, // Emerald
-        {top: '#8b5cf6', bottom: '#5b21b6'}, // Violet
-        {top: '#f59e0b', bottom: '#b45309'}, // Amber
-        {top: '#ec4899', bottom: '#be185d'}, // Pink
-        {top: '#06b6d4', bottom: '#0e7490'}, // Cyan
-        {top: '#f43f5e', bottom: '#be123c'}, // Rose
-        {top: '#6366f1', bottom: '#4338ca'}, // Indigo
-    ];
+    const originalLabels = [...chartData.labels];
+    const originalDatasets = chartData.datasets.map(ds => ({
+        ...ds,
+        data: [...ds.data]
+    }));
 
-    // Build gradasi unik untuk masing-masing batang fakultas
-    const backgrounds = chartData.labels.map((_, i) => {
-        const palette = colorPalettes[i % colorPalettes.length];
-        const gradient = ctx.createLinearGradient(0, 0, 0, 350);
-        gradient.addColorStop(0, palette.top);
-        gradient.addColorStop(1, palette.bottom);
-        return gradient;
+    const rawProdi = chartData.raw_prodi || [];
+    const daftarJenjang = ['Diploma 3', 'Sarjana', 'Profesi', 'Magister', 'Doktor'];
+
+    const jenjangColors = {
+        'Mahasiswa Diploma 3': {bg: '#0f766e', text: '#ffffff'},
+        'Mahasiswa Sarjana': {bg: '#10b981', text: '#ffffff'},
+        'Mahasiswa Profesi': {bg: '#14b8a6', text: '#ffffff'},
+        'Mahasiswa Magister': {bg: '#6ee7b7', text: '#0f172a'},
+        'Mahasiswa Doktor': {bg: '#a7f3d0', text: '#0f172a'},
+    };
+
+    const styledDatasets = originalDatasets.map(ds => {
+        const color = jenjangColors[ds.label] || {bg: '#3b82f6', text: '#ffffff'};
+        return {
+            label: ds.label,
+            data: ds.data,
+            backgroundColor: color.bg,
+            borderColor: '#ffffff',
+            borderWidth: 1,
+            borderRadius: 2,
+            maxBarThickness: 48,
+        };
     });
 
-    // 2. Plugin Custom: Drop Shadow Halus Ala CSS
-    const shadowPlugin = {
-        id: 'customShadow',
-        beforeDatasetDraw: (chart) => {
-            const {ctx} = chart;
+    const stackedBarNumbersPlugin = {
+        id: 'stackedBarNumbers',
+        afterDatasetsDraw(chart) {
+            const {ctx, data, scales: {x}} = chart;
             ctx.save();
-            ctx.shadowColor = 'rgba(15, 23, 42, 0.12)'; // Slate 900 dengan opacity rendah
-            ctx.shadowBlur = 12;
-            ctx.shadowOffsetX = 0;
-            ctx.shadowOffsetY = 6;
-        },
-        afterDatasetDraw: (chart) => {
-            chart.ctx.restore();
+            ctx.textAlign = 'center';
+
+            ctx.font = '600 11px sans-serif';
+            ctx.textBaseline = 'middle';
+            chart.data.datasets.forEach((dataset, dsIndex) => {
+                const meta = chart.getDatasetMeta(dsIndex);
+                if (meta.hidden) return;
+
+                meta.data.forEach((bar, index) => {
+                    const value = dataset.data[index];
+                    if (!value || value === 0) return;
+
+                    const height = Math.abs(bar.base - bar.y);
+                    if (height > 18) {
+                        const colorConfig = jenjangColors[dataset.label] || {text: '#ffffff'};
+                        ctx.fillStyle = colorConfig.text;
+                        ctx.fillText(value.toLocaleString('id-ID'), bar.x, bar.y + (height / 2));
+                    }
+                });
+            });
+
+            ctx.font = '800 12px sans-serif';
+            ctx.fillStyle = '#0f172a';
+            ctx.textBaseline = 'bottom';
+
+            for (let i = 0; i < data.labels.length; i++) {
+                let total = 0;
+                let minTopY = chart.chartArea.bottom;
+
+                chart.data.datasets.forEach((dataset, dsIdx) => {
+                    const meta = chart.getDatasetMeta(dsIdx);
+                    if (!meta.hidden) {
+                        const val = dataset.data[i] || 0;
+                        total += val;
+                        const bar = meta.data[i];
+                        if (bar && val > 0 && bar.y < minTopY) {
+                            minTopY = bar.y;
+                        }
+                    }
+                });
+
+                if (total > 0 && minTopY < chart.chartArea.bottom) {
+                    ctx.fillText(total.toLocaleString('id-ID'), x.getPixelForValue(i), minTopY - 5);
+                }
+            }
+            ctx.restore();
         }
     };
 
-    new ChartLibrary(ctx, {
+    const myChart = new ChartLibrary(ctx, {
         type: 'bar',
-        plugins: [shadowPlugin], // Aktifkan efek bayangan
+        plugins: [stackedBarNumbersPlugin],
         data: {
-            labels: chartData.labels,
-            datasets: [{
-                label: 'Mahasiswa Aktif',
-                data: chartData.data,
-                backgroundColor: backgrounds,
-                borderRadius: 0,          // Sudut membulat modern
-                borderSkipped: false,      // Semua sudut mulus
-                maxBarThickness: 46,       // Batas maksimal lebar batang biar nggak kegendutan
-                barPercentage: 0.7,
-                categoryPercentage: 0.8,
-            }]
+            labels: originalLabels,
+            datasets: styledDatasets
         },
         options: {
             responsive: true,
             maintainAspectRatio: false,
-            animation: {
-                duration: 1200,
-                easing: 'easeOutQuart', // Animasi naik yang mulus elegan
-            },
-            interaction: {
-                mode: 'index',
-                intersect: false,
-            },
+            layout: {padding: {top: 30}},
+            animation: {duration: 1000, easing: 'easeOutQuart'},
+            interaction: {mode: 'index', intersect: false},
             plugins: {
-                legend: {display: false},
+                legend: {
+                    display: true,
+                    position: 'bottom',
+                    labels: {
+                        usePointStyle: true,
+                        boxWidth: 8,
+                        font: {size: 11, weight: '600'},
+                        color: '#475569',
+                        padding: 15
+                    }
+                },
                 tooltip: {
-                    enabled: true,
-                    backgroundColor: 'rgba(15, 23, 42, 0.92)', // Slate dark glass effect
-                    titleFont: {size: 12, weight: '600', family: "system-ui, -apple-system, sans-serif"},
-                    bodyFont: {size: 14, weight: '800', family: "system-ui, -apple-system, sans-serif"},
-                    padding: {top: 10, right: 14, bottom: 10, left: 14},
-                    cornerRadius: 10,
-                    displayColors: true,
-                    boxWidth: 8,
-                    boxHeight: 8,
-                    usePointStyle: true,
+                    backgroundColor: 'rgba(15, 23, 42, 0.92)',
+                    titleFont: {size: 13, weight: 'bold'},
+                    bodyFont: {size: 13},
+                    padding: 12,
+                    cornerRadius: 8,
                     callbacks: {
-                        label: (context) => `  ${context.parsed.y.toLocaleString('id-ID')} Mahasiswa`
+                        label: (context) => `  ${context.dataset.label}: ${context.parsed.y.toLocaleString('id-ID')}`
                     }
                 }
             },
             scales: {
                 x: {
+                    stacked: true,
                     grid: {display: false, drawBorder: false},
                     ticks: {
-                        font: {size: 12, weight: '600'},
-                        color: '#475569', // Slate 600
-                        padding: 8
+                        font: {size: 11, weight: '500'},
+                        color: '#475569',
+                        maxRotation: 45,
+                        minRotation: 45,
+                        callback: function (value) {
+                            let label = this.getLabelForValue(value);
+                            return label.length > 18 ? label.slice(0, 18) + '...' : label;
+                        }
                     }
                 },
                 y: {
+                    stacked: true,
                     beginAtZero: true,
-                    border: {dash: [5, 5], display: false}, // Garis putus-putus (dashed)
-                    grid: {
-                        color: '#f1f5f9', // Slate 100 super halus
-                        drawBorder: false,
-                    },
+                    grid: {color: '#f1f5f9', drawBorder: false},
                     ticks: {
-                        font: {size: 11, weight: '500'},
-                        color: '#94a3b8', // Slate 400
-                        padding: 10,
-                        callback: (value) => value.toLocaleString('id-ID')
+                        font: {size: 11},
+                        color: '#64748b',
+                        callback: (val) => val.toLocaleString('id-ID')
                     }
                 }
             }
         }
     });
+
+    const buildProdiChartData = (selectedFacultyName) => {
+        const prodiInFaculty = rawProdi.filter(p => p.fakultas === selectedFacultyName);
+
+        const cleanName = (name) => name.replace(/\s*\((D3|D4|S1|S2|S3|Profesi)\)/gi, '').trim();
+
+        const prodiLabels = [...new Set(prodiInFaculty.map(p => cleanName(p.nama_prodi)))];
+
+        const newDatasets = daftarJenjang.map(jenjang => {
+            const labelJenjang = 'Mahasiswa ' + jenjang;
+            const color = jenjangColors[labelJenjang] || {bg: '#3b82f6', text: '#ffffff'};
+
+            const dataValues = prodiLabels.map(labelProdi => {
+                return prodiInFaculty
+                    .filter(p => cleanName(p.nama_prodi) === labelProdi && p.jenjang === jenjang)
+                    .reduce((sum, p) => sum + parseInt(p.jumlah_mahasiswa_aktif || 0, 10), 0);
+            });
+
+            return {
+                label: labelJenjang,
+                data: dataValues,
+                backgroundColor: color.bg,
+                borderColor: '#ffffff',
+                borderWidth: 1,
+                borderRadius: 2,
+                maxBarThickness: 48,
+            };
+        });
+
+        return {labels: prodiLabels, datasets: newDatasets};
+    };
+
+    const facultySelect = root.querySelector('[data-statistik-mahasiswa-faculty]');
+    const yearSelect = root.querySelector('[data-statistik-mahasiswa-year]');
+    const semesterSelect = root.querySelector('[data-statistik-mahasiswa-semester]');
+
+    facultySelect?.addEventListener('change', (e) => {
+        const selectedFaculty = e.target.value;
+
+        if (selectedFaculty === 'Semua Fakultas') {
+            myChart.data.labels = [...originalLabels];
+            myChart.data.datasets = styledDatasets.map(ds => ({
+                ...ds,
+                data: [...ds.data]
+            }));
+        } else {
+            const prodiData = buildProdiChartData(selectedFaculty);
+            myChart.data.labels = prodiData.labels;
+            myChart.data.datasets = prodiData.datasets;
+        }
+
+        myChart.update();
+    });
+
+    const handleServerFilter = () => {
+        const url = new URL(window.location.href);
+        if (yearSelect) url.searchParams.set('tahun', yearSelect.value);
+        if (semesterSelect) url.searchParams.set('semester', semesterSelect.value);
+        window.location.href = url.toString();
+    };
+
+    yearSelect?.addEventListener('change', handleServerFilter);
+    semesterSelect?.addEventListener('change', handleServerFilter);
 };
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -378,7 +481,8 @@ function initTirtaAgentChats() {
                 const payload = await response.json();
 
                 if (!response.ok) {
-                    throw new Error(payload.message ?? 'TirtaAgent belum bisa menjawab.');
+                    addMessage(payload.message ?? 'TirtaAgent belum bisa menjawab.', 'assistant');
+                    return;
                 }
 
                 conversationId = payload.conversation_id;
