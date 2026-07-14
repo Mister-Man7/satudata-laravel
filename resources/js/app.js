@@ -459,12 +459,27 @@ function initTirtaAgentChats() {
                 return;
             }
 
+            // 1. Tampilkan pesan user & aktifkan loading
             addMessage(message, 'user');
             input.value = '';
             autosizeInput();
             setLoading(true);
 
+            // 2. Ambil konteks layar saat ini (jika user sedang di halaman statistik)
+            const root = document.querySelector('[data-statistik-mahasiswa-root]');
+            let currentContext = null;
+            if (root) {
+                const payload = JSON.parse(root.getAttribute('data-payload') || '{}');
+                currentContext = {
+                    halaman: "Statistik Mahasiswa Aktif",
+                    tahun_terpilih: payload.defaultSelection?.year,
+                    semester_terpilih: payload.defaultSelection?.semester,
+                    fakultas_terpilih: payload.defaultSelection?.faculty
+                };
+            }
+
             try {
+                // 3. Kirim pesan + konteks halaman ke endpoint Laravel
                 const response = await fetch(chat.dataset.endpoint, {
                     method: 'POST',
                     headers: {
@@ -475,6 +490,7 @@ function initTirtaAgentChats() {
                     body: JSON.stringify({
                         message,
                         conversation_id: conversationId,
+                        page_context: currentContext, // <-- Konteks terkirim dengan aman di sini
                     }),
                 });
 

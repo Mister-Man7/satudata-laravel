@@ -3,6 +3,7 @@
 namespace App\Ai\Tools;
 
 use App\Services\SiakangLulusanService;
+use App\Services\SiakangMahasiswaAktifService;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Laravel\Ai\Contracts\Tool;
 use Laravel\Ai\Tools\Request;
@@ -10,62 +11,53 @@ use Stringable;
 
 class GetAcademicStats implements Tool
 {
-    /**
-     * Get the description of the tool's purpose.
-     */
     public function description(): Stringable|string
     {
-        return 'Mendapatkan statistik data akademik universitas secara ringkas, termasuk total alumni/mahasiswa lulus dan distribusi jumlah mahasiswa per fakultas di UNTIRTA.';
+        return 'Mendapatkan statistik ringkas data akademik universitas, termasuk total mahasiswa aktif dan total alumni/lulusan secara keseluruhan di UNTIRTA.';
     }
 
-    /**
-     * Execute the tool.
-     */
     public function handle(Request $request): Stringable|string
     {
         $lulusanService = app(SiakangLulusanService::class);
-        $hasilApi = $lulusanService->getData([
+        $aktifService = app(SiakangMahasiswaAktifService::class);
+        
+        $hasilLulusan = $lulusanService->getData([
             'limit' => 1,
             'page' => 1,
         ]);
 
-        $totalLulusan = 0;
-        $apiTersedia = 'tidak tersedia (offline)';
+        $totalLulusan = $hasilLulusan['tersedia'] ? $hasilLulusan['total'] : 0;
 
-        if ($hasilApi['tersedia']) {
-            $totalLulusan = $hasilApi['total'];
-            $apiTersedia = 'tersedia (online)';
+        $hasilAktif = $aktifService->getData([]);
+        $totalAktif = $hasilAktif['tersedia'] ? (int)($hasilAktif['total_mahasiswa_aktif'] ?? 0) : 0;
+
+        $fakultas = [];
+        $dataFakultasApi = $hasilAktif['detail_per_fakultas'] ?? [];
+
+        foreach ($dataFakultasApi as $item) {
+            $namaFak = trim($item['nama_fakultas'] ?? '');
+            if (empty($namaFak) || str_ireplace(' ', '', $namaFak) === 'Tidakadafakultas' || str_contains(strtolower($namaFak), 'tidak ada')) {
+                continue;
+            }
+            $fakultas[] = [
+                'name' => $namaFak,
+                'total' => (int)($item['jumlah_mahasiswa_aktif'] ?? 0)
+            ];
         }
 
-        // Statistik Fakultas (static data based on AkademikController)
-        $fakultas = [
-            ['name' => 'Kedokteran', 'total' => 288],
-            ['name' => 'Pertanian', 'total' => 5114],
-            ['name' => 'Hukum', 'total' => 5985],
-            ['name' => 'Teknik', 'total' => 10895],
-            ['name' => 'Ekonomi dan Bisnis', 'total' => 12321],
-            ['name' => 'Ilmu Sosial & Politik', 'total' => 6031],
-            ['name' => 'Keguruan dan Ilmu Pendidikan', 'total' => 17229],
-            ['name' => 'Pascasarjana', 'total' => 1534],
-        ];
-
         $output = [
-            'status_koneksi_api_siakang' => $apiTersedia,
+            'status_koneksi_api_lulusan' => $hasilLulusan['tersedia'] ? 'tersedia (online)' : 'tidak tersedia (offline)',
+            'status_koneksi_api_aktif' => $hasilAktif['tersedia'] ? 'tersedia (online)' : 'tidak tersedia (offline)',
             'ringkasan_mahasiswa' => [
-                'mahasiswa_aktif' => 'Belum tersedia',
-                'mahasiswa_tidak_aktif' => 'Belum tersedia',
+                'mahasiswa_aktif' => $totalAktif,
                 'mahasiswa_lulus' => $totalLulusan,
-                'mahasiswa_baru' => 'Belum tersedia',
             ],
-            'distribusi_mahasiswa_per_fakultas' => $fakultas,
+            'distribusi_mahasiswa_aktif_per_fakultas' => $fakultas,
         ];
 
         return json_encode($output, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
     }
 
-    /**
-     * Get the tool's schema definition.
-     */
     public function schema(JsonSchema $schema): array
     {
         return [];

@@ -10,17 +10,12 @@ use Stringable;
 
 class SearchGraduates implements Tool
 {
-    /**
-     * Get the description of the tool's purpose.
-     */
+
     public function description(): Stringable|string
     {
         return 'Mencari, memfilter, atau menghitung data mahasiswa yang telah lulus (alumni) berdasarkan nama/NPM, kode program studi, fakultas, angkatan masuk, atau tahun kelulusan.';
     }
 
-    /**
-     * Execute the tool.
-     */
     public function handle(Request $request): Stringable|string
     {
         $lulusanService = app(SiakangLulusanService::class);
@@ -64,7 +59,6 @@ class SearchGraduates implements Tool
             ]);
         }
 
-        // Clean up the data returned to only essential fields to save token space
         $daftarMahasiswa = collect($hasilApi['data'])->map(fn($mhs) => [
             'nama' => $mhs['nama'] ?? null,
             'nim' => $mhs['nim'] ?? $mhs['npm'] ?? null,
@@ -83,9 +77,6 @@ class SearchGraduates implements Tool
         ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
     }
 
-    /**
-     * Get the tool's schema definition.
-     */
     public function schema(JsonSchema $schema): array
     {
         return [
@@ -98,9 +89,6 @@ class SearchGraduates implements Tool
         ];
     }
 
-    /**
-     * @param array<string, int|string> $parameter
-     */
     private function handleFacultySummary(SiakangLulusanService $lulusanService, array $parameter, string $facultyQuery): Stringable|string
     {
         $faculty = $this->resolveFaculty($facultyQuery);
@@ -170,9 +158,6 @@ class SearchGraduates implements Tool
         ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
     }
 
-    /**
-     * @return array{name: string, aliases: array<int, string>, kode_prodi: array<int, string>}|null
-     */
     private function resolveFaculty(string $query): ?array
     {
         $normalizedQuery = $this->normalizeText($query);
@@ -189,9 +174,6 @@ class SearchGraduates implements Tool
         return null;
     }
 
-    /**
-     * @return array<int, array{name: string, aliases: array<int, string>, kode_prodi: array<int, string>}>
-     */
     private function facultyCatalog(): array
     {
         return [
