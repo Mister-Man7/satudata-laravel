@@ -15,11 +15,9 @@ class TirtaAgentController extends Controller
 {
     public function chat(Request $request): JsonResponse
     {
-        // 1. Tambahkan 'page_context' ke validator agar aman
         $validator = Validator::make($request->all(), [
             'message' => ['required', 'string', 'min:1', 'max:1000'],
             'conversation_id' => ['nullable', 'string', 'uuid'],
-            'page_context' => ['nullable', 'array'],
         ]);
 
         if ($validator->fails()) {
@@ -30,21 +28,6 @@ class TirtaAgentController extends Controller
         }
 
         $validated = $validator->validated();
-
-        // 2. Siapkan variabel pesan dan tangkap konteksnya
-        $userMessage = $validated['message'];
-        $context = $validated['page_context'] ?? null;
-
-        // 3. SISIPKAN KONTEKS LAYAR KE DALAM PESAN
-        if ($context && is_array($context)) {
-            $halaman = $context['halaman'] ?? '-';
-            $tahun = $context['tahun_terpilih'] ?? '-';
-            $semester = $context['semester_terpilih'] ?? '-';
-            $fakultas = $context['fakultas_terpilih'] ?? '-';
-
-            $infoLayar = "\n[Konteks: {$context['halaman']}, Tahun: {$context['tahun_terpilih']}, Smt: {$context['semester_terpilih']}, Fak: {$context['fakultas_terpilih']}]";
-//            $userMessage .= $infoLayar;
-        }
 
         $participant = $this->guestParticipant($request);
         $conversationId = $this->validConversationId(
@@ -61,26 +44,22 @@ class TirtaAgentController extends Controller
         }
 
         try {
-            // 4. Gunakan $userMessage yang sudah disisipi konteks
-            $response = $agent->prompt($userMessage);
+            $response = $agent->prompt($validated['message']);
         } catch (Throwable $exception) {
             report($exception);
 
             try {
-                // Gunakan $userMessage di fallback juga
                 $fallback = $this->chatWithOpenAiCompatibleProvider(
                     $agent,
-                    $userMessage,
+                    $validated['message'],
                     $participant->id,
                     $conversationId,
                 );
             } catch (Throwable $fallbackException) {
                 report($fallbackException);
 
-                // 👇 UBAH SEMENTARA: Tampilkan pesan error aslinya ke layar browser/network tab!
                 return response()->json([
-                    'message' => 'Error Asli: ' . $fallbackException->getMessage(),
-                    'file' => $fallbackException->getFile() . ' (Baris: ' . $fallbackException->getLine() . ')',
+                    'message' => 'TirtaAgent belum bisa menjawab sekarang. Cek konfigurasi provider AI lalu coba lagi.',
                 ], 502);
             }
 
@@ -99,11 +78,11 @@ class TirtaAgentController extends Controller
 
     private function guestParticipant(Request $request): object
     {
-        if (!$request->session()->has('tirta_agent_guest_id')) {
+        if (! $request->session()->has('tirta_agent_guest_id')) {
             $request->session()->put('tirta_agent_guest_id', random_int(1, 2_147_483_647));
         }
 
-        return (object)[
+        return (object) [
             'id' => $request->session()->get('tirta_agent_guest_id'),
         ];
     }
@@ -122,17 +101,23 @@ class TirtaAgentController extends Controller
         return $exists ? $conversationId : null;
     }
 
+    /**
+     * ChatAnywhere supports OpenAI-compatible chat completions, while the
+     * Laravel AI OpenAI gateway uses the newer Responses API.
+     *
+     * @return array{message: string, conversation_id: string}
+     */
     private function chatWithOpenAiCompatibleProvider(
         TirtaAgent $agent,
-        string     $message,
-        int        $participantId,
-        ?string    $conversationId,
-    ): array
-    {
+        string $message,
+        int $participantId,
+        ?string $conversationId,
+    ): array {
         $conversationsTable = config('ai.conversations.tables.conversations', 'agent_conversations');
         $messagesTable = config('ai.conversations.tables.messages', 'agent_conversation_messages');
-        $conversationId ??= (string)Str::uuid7();
+        $conversationId ??= (string) Str::uuid7();
 
+        // 1. Get history from DB (including user, assistant, and tool messages)
         $historyData = DB::table($messagesTable)
             ->where('conversation_id', $conversationId)
             ->whereIn('role', ['user', 'assistant', 'tool'])
@@ -147,7 +132,7 @@ class TirtaAgentController extends Controller
                 'role' => $item->role,
                 'content' => $item->content,
             ];
-
+            
             if ($item->role === 'assistant') {
                 $toolCalls = json_decode($item->tool_calls, true);
                 if (!empty($toolCalls)) {
@@ -157,29 +142,32 @@ class TirtaAgentController extends Controller
                     }
                 }
             }
-
+            
             if ($item->role === 'tool') {
                 $meta = json_decode($item->meta, true);
                 $msg['tool_call_id'] = $meta['tool_call_id'] ?? '';
             }
-
+            
             $history[] = $msg;
         }
 
+        // 2. Map tools
         $tools = $agent->tools();
         $openAiTools = $this->mapAgentToolsForOpenAi($tools);
 
+        // 3. Prepare messages for API
         $messages = [
-            ['role' => 'system', 'content' => (string)$agent->instructions()],
+            ['role' => 'system', 'content' => (string) $agent->instructions()],
             ...$history,
             ['role' => 'user', 'content' => $message],
         ];
 
+        // 4. Send request to OpenAI
         $requestPayload = [
             'model' => config('ai.providers.openai.models.text.default', 'gpt-4o-mini'),
             'messages' => $messages,
         ];
-
+        
         if (!empty($openAiTools)) {
             $requestPayload['tools'] = $openAiTools;
         }
@@ -187,15 +175,16 @@ class TirtaAgentController extends Controller
         $response = Http::timeout(60)
             ->acceptJson()
             ->withToken(config('ai.providers.openai.key'))
-            ->post(rtrim((string)config('ai.providers.openai.url'), '/') . '/chat/completions', $requestPayload)
+            ->post(rtrim((string) config('ai.providers.openai.url'), '/').'/chat/completions', $requestPayload)
             ->throw()
             ->json();
 
+        // Check if the response wants to call tools
         $choice = data_get($response, 'choices.0.message');
         $toolCalls = $choice['tool_calls'] ?? [];
 
         if (!empty($toolCalls)) {
-
+            // A. Store the user's message in DB first
             DB::transaction(function () use ($conversationsTable, $messagesTable, $conversationId, $participantId, $message): void {
                 $conversationExists = DB::table($conversationsTable)->where('id', $conversationId)->exists();
                 if ($conversationExists) {
@@ -212,10 +201,11 @@ class TirtaAgentController extends Controller
                 $this->storeConversationMessage($messagesTable, $conversationId, $participantId, 'user', $message);
             });
 
+            // B. Store assistant tool-call message in DB
             $assistantContent = $choice['content'] ?? '';
             DB::transaction(function () use ($messagesTable, $conversationId, $participantId, $assistantContent, $toolCalls): void {
                 DB::table($messagesTable)->insert([
-                    'id' => (string)Str::uuid7(),
+                    'id' => (string) Str::uuid7(),
                     'conversation_id' => $conversationId,
                     'user_id' => $participantId,
                     'agent' => TirtaAgent::class,
@@ -231,24 +221,27 @@ class TirtaAgentController extends Controller
                 ]);
             });
 
+            // Append assistant tool-call message to the API messages array
             $messages[] = [
                 'role' => 'assistant',
                 'content' => $assistantContent === '' ? null : $assistantContent,
                 'tool_calls' => $toolCalls,
             ];
 
+            // C. Execute each tool call and store the tool result message
             foreach ($toolCalls as $toolCall) {
                 $callId = $toolCall['id'] ?? '';
                 $funcName = $toolCall['function']['name'] ?? '';
                 $funcArgs = json_decode($toolCall['function']['arguments'] ?? '{}', true) ?: [];
 
+                // Find matching tool
                 $toolOutput = '';
                 foreach ($tools as $t) {
                     if (\Laravel\Ai\Tools\ToolNameResolver::resolve($t) === $funcName) {
                         try {
-                            $toolOutput = (string)$t->handle(new \Laravel\Ai\Tools\Request($funcArgs));
+                            $toolOutput = (string) $t->handle(new \Laravel\Ai\Tools\Request($funcArgs));
                         } catch (Throwable $e) {
-                            $toolOutput = json_encode(['error' => 'Tool execution failed: ' . $e->getMessage()]);
+                            $toolOutput = json_encode(['error' => 'Tool execution failed: '.$e->getMessage()]);
                         }
                         break;
                     }
@@ -258,9 +251,10 @@ class TirtaAgentController extends Controller
                     $toolOutput = json_encode(['error' => 'Tool not found.']);
                 }
 
+                // Store tool result message in DB
                 DB::transaction(function () use ($messagesTable, $conversationId, $participantId, $toolOutput, $callId): void {
                     DB::table($messagesTable)->insert([
-                        'id' => (string)Str::uuid7(),
+                        'id' => (string) Str::uuid7(),
                         'conversation_id' => $conversationId,
                         'user_id' => $participantId,
                         'agent' => TirtaAgent::class,
@@ -276,6 +270,7 @@ class TirtaAgentController extends Controller
                     ]);
                 });
 
+                // Append tool response to the API messages array
                 $messages[] = [
                     'role' => 'tool',
                     'tool_call_id' => $callId,
@@ -283,6 +278,7 @@ class TirtaAgentController extends Controller
                 ];
             }
 
+            // D. Request final answer from OpenAI
             $finalRequestPayload = [
                 'model' => config('ai.providers.openai.models.text.default', 'gpt-4o-mini'),
                 'messages' => $messages,
@@ -294,16 +290,17 @@ class TirtaAgentController extends Controller
             $finalResponse = Http::timeout(60)
                 ->acceptJson()
                 ->withToken(config('ai.providers.openai.key'))
-                ->post(rtrim((string)config('ai.providers.openai.url'), '/') . '/chat/completions', $finalRequestPayload)
+                ->post(rtrim((string) config('ai.providers.openai.url'), '/').'/chat/completions', $finalRequestPayload)
                 ->throw()
                 ->json();
 
             $answer = data_get($finalResponse, 'choices.0.message.content');
 
-            if (!is_string($answer) || trim($answer) === '') {
+            if (! is_string($answer) || trim($answer) === '') {
                 throw new \RuntimeException('OpenAI-compatible provider returned an empty response.');
             }
 
+            // Store the final assistant answer in DB
             DB::transaction(function () use ($messagesTable, $conversationId, $participantId, $answer): void {
                 $this->storeConversationMessage($messagesTable, $conversationId, $participantId, 'assistant', $answer);
             });
@@ -314,9 +311,10 @@ class TirtaAgentController extends Controller
             ];
         }
 
+        // Standard flow when NO tool calls are returned by the AI
         $answer = $choice['content'];
 
-        if (!is_string($answer) || trim($answer) === '') {
+        if (! is_string($answer) || trim($answer) === '') {
             throw new \RuntimeException('OpenAI-compatible provider returned an empty response.');
         }
 
@@ -360,10 +358,10 @@ class TirtaAgentController extends Controller
                     'type' => 'function',
                     'function' => [
                         'name' => $name,
-                        'description' => (string)$tool->description(),
+                        'description' => (string) $tool->description(),
                         'parameters' => [
                             'type' => 'object',
-                            'properties' => $schemaArray['properties'] ?? (object)[],
+                            'properties' => $schemaArray['properties'] ?? (object) [],
                             'required' => $schemaArray['required'] ?? [],
                             'additionalProperties' => false,
                         ],
@@ -377,13 +375,12 @@ class TirtaAgentController extends Controller
     private function storeConversationMessage(
         string $messagesTable,
         string $conversationId,
-        int    $participantId,
+        int $participantId,
         string $role,
         string $content,
-    ): void
-    {
+    ): void {
         DB::table($messagesTable)->insert([
-            'id' => (string)Str::uuid7(),
+            'id' => (string) Str::uuid7(),
             'conversation_id' => $conversationId,
             'user_id' => $participantId,
             'agent' => TirtaAgent::class,
