@@ -15,7 +15,7 @@ class AsetController extends Controller
 
     public function index()
     {
-        $response = $this->apiService->makeRequest('GET', 'kampus', ['per_page' => 10]);
+        $response = $this->apiService->makeRequest('GET', 'kampus', ['per_page' => 100]);
         $kampusList = $response['data']['data'] ?? $response['data'] ?? [];
 
         $datas = collect($kampusList)->map(function ($kampus) {
@@ -37,7 +37,7 @@ class AsetController extends Controller
     public function gedung($kampusId)
     {
         $response = $this->apiService->makeRequest('GET', "gedung/", [
-            'per_page' => 10,
+            'per_page' => 100,
         ]);
         $semuaGedung = $response['data']['data'] ?? $response['data'] ?? [];
         $gedungList = collect($semuaGedung)
@@ -65,7 +65,7 @@ class AsetController extends Controller
     public function ruangan($gedungId)
     {
         $response = $this->apiService->makeRequest('GET', "ruangan/by-gedung/{$gedungId}", [
-            'per_page' => 10
+            'per_page' => 100,
         ]);
 
         $ruanganList = $response['data']['data'] ?? $response['data'] ?? [];
@@ -88,7 +88,7 @@ class AsetController extends Controller
     public function bmn($ruanganId)
     {
         $response = $this->apiService->makeRequest('GET', "bmn-all/by-ruangan/{$ruanganId}", [
-            'per_page' => 10,
+            'per_page' => 100,
         ]);
 //        dd($response);
 

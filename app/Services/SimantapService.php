@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use Exception;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 
@@ -31,7 +32,7 @@ class SimantapService
                 }
             }
 
-            throw new \Exception('Gagal mendapatkan token');
+            throw new Exception('Gagal mendapatkan token');
         });
     }
 

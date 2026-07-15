@@ -10,9 +10,6 @@ use Stringable;
 
 class GetAcademicStats implements Tool
 {
-    /**
-     * Get the description of the tool's purpose.
-     */
     public function description(): Stringable|string
     {
         return 'Mendapatkan statistik data akademik universitas secara ringkas, termasuk total alumni/mahasiswa lulus dan distribusi jumlah mahasiswa per fakultas di UNTIRTA.';
@@ -37,7 +34,6 @@ class GetAcademicStats implements Tool
             $apiTersedia = 'tersedia (online)';
         }
 
-        // Statistik Fakultas (static data based on AkademikController)
         $fakultas = [
             ['name' => 'Kedokteran', 'total' => 288],
             ['name' => 'Pertanian', 'total' => 5114],
@@ -62,10 +58,7 @@ class GetAcademicStats implements Tool
 
         return json_encode($output, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
     }
-
-    /**
-     * Get the tool's schema definition.
-     */
+    
     public function schema(JsonSchema $schema): array
     {
         return [];

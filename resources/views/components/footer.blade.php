@@ -1,3 +1,83 @@
+<section class="pt-10 font-based">
+    <div class="max-w-7xl mx-auto px-6">
+        <div class="inline-block bg-[#F3F4F6] px-8 py-3.5 rounded-t-2xl text-blue-500 font-bold text-sm md:text-base">
+            @if(request()->is('akademik*'))
+                Menu Pilihan
+            @elseif(request()->is('pegawai*'))
+                Menu Pilihan
+            @elseif(request()->is('aset*'))
+                Menu Pilihan
+            @else
+                Menu Pilihan
+            @endif
+        </div>
+        <div class="bg-[#F3F4F6] p-6 md:p-10 rounded-tr-2xl">
+            @if(request()->is('akademik*'))
+                <div
+                    class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-y-6 gap-x-6 text-xs md:text-sm text-gray-700 font-medium">
+                    <a href="/akademik/jadwal" class="flex items-start gap-3 hover:text-blue-500 transition group">
+                        <i class="fa-solid fa-location-arrow text-blue-500 mt-1 transform -rotate-45 group-hover:translate-x-1 transition"></i>
+                        <span>Jadwal Kuliah & Ujian</span>
+                    </a>
+                    <a href="/akademik/siakad" class="flex items-start gap-3 hover:text-blue-500 transition group">
+                        <i class="fa-solid fa-location-arrow text-blue-500 mt-1 transform -rotate-45 group-hover:translate-x-1 transition"></i>
+                        <span>Portal SIAKAD Mahasiswa</span>
+                    </a>
+                    <a href="/akademik/kalender" class="flex items-start gap-3 hover:text-blue-500 transition group">
+                        <i class="fa-solid fa-location-arrow text-blue-500 mt-1 transform -rotate-45 group-hover:translate-x-1 transition"></i>
+                        <span>Kalender Akademik</span>
+                    </a>
+                    <a href="/akademik/wisuda" class="flex items-start gap-3 hover:text-blue-500 transition group">
+                        <i class="fa-solid fa-location-arrow text-blue-500 mt-1 transform -rotate-45 group-hover:translate-x-1 transition"></i>
+                        <span>Pendaftaran Wisuda Online</span>
+                    </a>
+                </div>
+
+            @elseif(request()->is('pegawai*'))
+                <div
+                    class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-y-6 gap-x-6 text-xs md:text-sm text-gray-700 font-medium">
+                    <a href="/pegawai/presensi" class="flex items-start gap-3 hover:text-blue-500 transition group">
+                        <i class="fa-solid fa-location-arrow text-blue-500 mt-1 transform -rotate-45 group-hover:translate-x-1 transition"></i>
+                        <span>Presensi & Kehadiran</span>
+                    </a>
+                    <a href="/pegawai/cuti" class="flex items-start gap-3 hover:text-blue-500 transition group">
+                        <i class="fa-solid fa-location-arrow text-blue-500 mt-1 transform -rotate-45 group-hover:translate-x-1 transition"></i>
+                        <span>Pengajuan Cuti & Izin</span>
+                    </a>
+                    <a href="/pegawai/kinerja" class="flex items-start gap-3 hover:text-blue-500 transition group">
+                        <i class="fa-solid fa-location-arrow text-blue-500 mt-1 transform -rotate-45 group-hover:translate-x-1 transition"></i>
+                        <span>Sasaran Kinerja Pegawai (SKP)</span>
+                    </a>
+                    <a href="/pegawai/direktori" class="flex items-start gap-3 hover:text-blue-500 transition group">
+                        <i class="fa-solid fa-location-arrow text-blue-500 mt-1 transform -rotate-45 group-hover:translate-x-1 transition"></i>
+                        <span>Direktori Staf & Dosen</span>
+                    </a>
+                </div>
+
+            @elseif(request()->is('aset*'))
+                <div
+                    class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-y-6 gap-x-6 text-xs md:text-sm text-gray-700 font-medium">
+                    <a href="/aset/inventaris" class="flex items-start gap-3 hover:text-blue-500 transition group">
+                        <i class="fa-solid fa-location-arrow text-blue-500 mt-1 transform -rotate-45 group-hover:translate-x-1 transition"></i>
+                        <span>Inventaris Barang Kampus</span>
+                    </a>
+                    <a href="/aset/peminjaman" class="flex items-start gap-3 hover:text-blue-500 transition group">
+                        <i class="fa-solid fa-location-arrow text-blue-500 mt-1 transform -rotate-45 group-hover:translate-x-1 transition"></i>
+                        <span>Peminjaman Ruang & Alat</span>
+                    </a>
+                    <a href="/aset/pemeliharaan" class="flex items-start gap-3 hover:text-blue-500 transition group">
+                        <i class="fa-solid fa-location-arrow text-blue-500 mt-1 transform -rotate-45 group-hover:translate-x-1 transition"></i>
+                        <span>Laporan Kerusakan / Maintenance</span>
+                    </a>
+                    <a href="/aset/bmn" class="flex items-start gap-3 hover:text-blue-500 transition group">
+                        <i class="fa-solid fa-location-arrow text-blue-500 mt-1 transform -rotate-45 group-hover:translate-x-1 transition"></i>
+                        <span>Barang Milik Negara (BMN)</span>
+                    </a>
+                </div>
+            @endif
+        </div>
+    </div>
+</section>
 <footer class="bg-blue-500 text-white">
     <div class="max-w-7xl mx-auto px-6 py-10">
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-10">
