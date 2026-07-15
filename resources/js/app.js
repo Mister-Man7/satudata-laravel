@@ -364,8 +364,10 @@ function initTirtaAgentChats() {
         };
 
         const addMessage = (content, role) => {
-            typing?.classList.add('hidden');
-            typing?.classList.remove('flex');
+            if (typing) {
+                typing.classList.add('hidden');
+                typing.classList.remove('flex');
+            }
 
             const row = document.createElement('div');
             const bubble = document.createElement('div');
@@ -387,7 +389,6 @@ function initTirtaAgentChats() {
 
             if (role === 'assistant') {
                 bubble.innerHTML = renderMarkdown(content);
-                // Make links open in a new tab
                 bubble.querySelectorAll('a').forEach((a) => {
                     a.target = '_blank';
                     a.rel = 'noopener noreferrer';
@@ -399,19 +400,20 @@ function initTirtaAgentChats() {
             row.appendChild(bubble);
             const time = document.createElement('div');
 
-            time.className =
-                'mt-2 text-[11px] opacity-70';
-
-            time.textContent = new Date().toLocaleTimeString(
-                'id-ID',
-                {
-                    hour: '2-digit',
-                    minute: '2-digit'
-                }
-            );
+            time.className = 'mt-2 text-[11px] opacity-70';
+            time.textContent = new Date().toLocaleTimeString('id-ID', {
+                hour: '2-digit',
+                minute: '2-digit'
+            });
 
             bubble.appendChild(time);
-            messages.appendChild(row);
+            
+            if (typing && typing.parentNode === messages) {
+                messages.insertBefore(row, typing);
+            } else {
+                messages.appendChild(row);
+            }
+            
             scrollToBottom();
         };
 
