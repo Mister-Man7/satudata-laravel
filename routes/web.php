@@ -3,6 +3,7 @@
 use App\Http\Controllers\AkademikController;
 use App\Http\Controllers\AsetController;
 use App\Http\Controllers\PegawaiController;
+use App\Http\Controllers\SIPPController;
 use App\Http\Controllers\TirtaAgentController;
 use Illuminate\Support\Facades\Route;
 
@@ -32,3 +33,5 @@ Route::get('/infrastruktur', function () {
 
 Route::post('/chat', [TirtaAgentController::class, 'chat'])
     ->name('tirta-agent.chat');
+
+Route::get('/sipp/publikasi-pegawai', [SIPPController::class, 'getPublikasiByNip']);

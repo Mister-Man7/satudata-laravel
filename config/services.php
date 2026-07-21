@@ -52,4 +52,11 @@ return [
         'email' => env('SIMANTAP_API_EMAIL'),
         'password' => env('SIMANTAP_API_PASSWORD'),
     ],
+
+    'sipp' => [
+        'base_url' => env('SIPP_API_BASE_URL'),
+        'token' => env('SIPP_API_TOKEN'),
+        'username' => env('SIPP_API_USERNAME'),
+        'password' => env('SIPP_API_PASSWORD'),
+    ],
 ];
