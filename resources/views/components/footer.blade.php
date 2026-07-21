@@ -15,9 +15,9 @@
             @if(request()->is('akademik*'))
                 <div
                     class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-y-6 gap-x-6 text-xs md:text-sm text-gray-700 font-medium">
-                    <a href="/akademik/jadwal" class="flex items-start gap-3 hover:text-blue-500 transition group">
+                    <a href="/akademik/perkuliahan" class="flex items-start gap-3 hover:text-blue-500 transition group">
                         <i class="fa-solid fa-location-arrow text-blue-500 mt-1 transform -rotate-45 group-hover:translate-x-1 transition"></i>
-                        <span>Jadwal Kuliah & Ujian</span>
+                        <span>Monitoring Perkuliahan</span>
                     </a>
                     <a href="/akademik/siakad" class="flex items-start gap-3 hover:text-blue-500 transition group">
                         <i class="fa-solid fa-location-arrow text-blue-500 mt-1 transform -rotate-45 group-hover:translate-x-1 transition"></i>
@@ -44,9 +44,9 @@
                         <i class="fa-solid fa-location-arrow text-blue-500 mt-1 transform -rotate-45 group-hover:translate-x-1 transition"></i>
                         <span>Pengajuan Cuti & Izin</span>
                     </a>
-                    <a href="/pegawai/kinerja" class="flex items-start gap-3 hover:text-blue-500 transition group">
+                    <a href="/pegawai/profil-dosen" class="flex items-start gap-3 hover:text-blue-500 transition group">
                         <i class="fa-solid fa-location-arrow text-blue-500 mt-1 transform -rotate-45 group-hover:translate-x-1 transition"></i>
-                        <span>Sasaran Kinerja Pegawai (SKP)</span>
+                        <span>Profil Dosen</span>
                     </a>
                     <a href="/pegawai/direktori" class="flex items-start gap-3 hover:text-blue-500 transition group">
                         <i class="fa-solid fa-location-arrow text-blue-500 mt-1 transform -rotate-45 group-hover:translate-x-1 transition"></i>

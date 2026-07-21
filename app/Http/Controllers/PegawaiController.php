@@ -347,7 +347,7 @@ class PegawaiController extends Controller
                 'textColor' => 'text-white',
             ],
         ];
-        
+
         $style = $styles[$title] ?? [
             'bg' => 'bg-slate-600',
             'iconBg' => 'bg-slate-100',
@@ -365,5 +365,14 @@ class PegawaiController extends Controller
             'icon' => $style['icon'],
             'textColor' => $style['textColor'],
         ];
+    }
+
+    public function getByNip(string $nip): JsonResponse
+    {
+        $hasilApi = $this->pegawaiService->getData([
+            'nip' => $nip
+        ]);
+
+        return response()->json($hasilApi);
     }
 }
