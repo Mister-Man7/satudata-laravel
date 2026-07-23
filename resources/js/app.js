@@ -1,11 +1,10 @@
 import Chart from 'chart.js/auto';
 import {marked} from "marked";
 
-const mobileMenuButton = document.querySelector('[data-mobile-menu-button]');
-const mobileMenu = document.querySelector('[data-mobile-menu]');
-
 window.Chart = Chart;
 window.marked = marked;
+
+// chart Mahasiswa
 window.initStatistikMahasiswaCharts = function (ChartLibrary) {
     const root = document.querySelector('[data-statistik-mahasiswa-root]');
     if (!root) return;
@@ -53,9 +52,9 @@ window.initStatistikMahasiswaCharts = function (ChartLibrary) {
             const {ctx, data, scales: {x}} = chart;
             ctx.save();
             ctx.textAlign = 'center';
-
             ctx.font = '600 11px sans-serif';
             ctx.textBaseline = 'middle';
+
             chart.data.datasets.forEach((dataset, dsIndex) => {
                 const meta = chart.getDatasetMeta(dsIndex);
                 if (meta.hidden) return;
@@ -168,9 +167,7 @@ window.initStatistikMahasiswaCharts = function (ChartLibrary) {
 
     const buildProdiChartData = (selectedFacultyName) => {
         const prodiInFaculty = rawProdi.filter(p => p.fakultas === selectedFacultyName);
-
         const cleanName = (name) => name.replace(/\s*\((D3|D4|S1|S2|S3|Profesi)\)/gi, '').trim();
-
         const prodiLabels = [...new Set(prodiInFaculty.map(p => cleanName(p.nama_prodi)))];
 
         const newDatasets = daftarJenjang.map(jenjang => {
@@ -230,16 +227,315 @@ window.initStatistikMahasiswaCharts = function (ChartLibrary) {
     semesterSelect?.addEventListener('change', handleServerFilter);
 };
 
-document.addEventListener('DOMContentLoaded', () => {
-    if (typeof window.initStatistikMahasiswaCharts === 'function') {
-        window.initStatistikMahasiswaCharts(Chart);
-    }
+// chart Peminat
+window.initJumlahPeminatChart = function (ChartLibrary) {
+    const root = document.querySelector('[data-peminat-root]');
+    if (!root) return;
 
-    initTirtaAgentDrawer();
-    initTirtaAgentChats();
-});
+    const rawData = JSON.parse(root.getAttribute('data-payload'));
+    const canvas = root.querySelector('[data-peminat-chart]');
+    const ctx = canvas?.getContext('2d');
 
-if (mobileMenuButton && mobileMenu) {
+    if (!ctx || !rawData) return;
+
+    const labels = Object.keys(rawData);
+    const dataNasional = labels.map(year => rawData[year]['Seleksi Nasional'] || 0);
+    const dataMandiri = labels.map(year => rawData[year]['Seleksi Mandiri'] || 0);
+    const dataLainnya = labels.map(year => rawData[year]['Lainnya'] || 0);
+
+    const peminatNumbersPlugin = {
+        id: 'peminatNumbers',
+        afterDatasetsDraw(chart) {
+            const {ctx, data, scales: {x}} = chart;
+            ctx.save();
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+
+            chart.data.datasets.forEach((dataset, dsIndex) => {
+                const meta = chart.getDatasetMeta(dsIndex);
+                if (meta.hidden) return;
+
+                meta.data.forEach((bar, index) => {
+                    const value = dataset.data[index];
+                    if (!value || value <= 500) return;
+
+                    const height = Math.abs(bar.base - bar.y);
+                    if (height > 18) {
+                        ctx.font = '600 11px sans-serif';
+                        ctx.fillStyle = dsIndex === 2 ? '#1f2937' : '#ffffff';
+                        ctx.fillText(value.toLocaleString('id-ID'), bar.x, bar.y + (height / 2));
+                    }
+                });
+            });
+
+            ctx.font = '700 12px sans-serif';
+            ctx.fillStyle = '#1f2937';
+            ctx.textBaseline = 'bottom';
+
+            for (let i = 0; i < data.labels.length; i++) {
+                let total = 0;
+                let minTopY = chart.chartArea.bottom;
+
+                chart.data.datasets.forEach((dataset, dsIdx) => {
+                    const meta = chart.getDatasetMeta(dsIdx);
+                    if (!meta.hidden) {
+                        const val = dataset.data[i] || 0;
+                        total += val;
+                        const bar = meta.data[i];
+                        if (bar && val > 0 && bar.y < minTopY) {
+                            minTopY = bar.y;
+                        }
+                    }
+                });
+
+                if (total > 0 && minTopY < chart.chartArea.bottom) {
+                    ctx.fillText(total.toLocaleString('id-ID'), x.getPixelForValue(i), minTopY - 6);
+                }
+            }
+            ctx.restore();
+        }
+    };
+
+    new ChartLibrary(ctx, {
+        type: 'bar',
+        plugins: [peminatNumbersPlugin],
+        data: {
+            labels: labels,
+            datasets: [
+                {
+                    label: 'Seleksi Nasional',
+                    data: dataNasional,
+                    backgroundColor: '#0B3D91',
+                    borderWidth: 0,
+                    maxBarThickness: 48,
+                },
+                {
+                    label: 'Seleksi Mandiri',
+                    data: dataMandiri,
+                    backgroundColor: '#64B5F6',
+                    borderWidth: 0,
+                    maxBarThickness: 48,
+                },
+                {
+                    label: 'Lainnya',
+                    data: dataLainnya,
+                    backgroundColor: '#E3F2FD',
+                    borderWidth: 0,
+                    borderRadius: 0,
+                    maxBarThickness: 48,
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            layout: {padding: {top: 25}},
+            animation: {duration: 800, easing: 'easeOutQuart'},
+            interaction: {mode: 'index', intersect: false},
+            plugins: {
+                legend: {
+                    display: true,
+                    position: 'bottom',
+                    labels: {
+                        usePointStyle: true,
+                        boxWidth: 8,
+                        font: {size: 11, weight: '600'},
+                        color: '#475569',
+                        padding: 15
+                    }
+                },
+                tooltip: {
+                    backgroundColor: 'rgba(15, 23, 42, 0.92)',
+                    titleFont: {size: 13, weight: 'bold'},
+                    bodyFont: {size: 13},
+                    padding: 12,
+                    cornerRadius: 0,
+                    callbacks: {
+                        label: (context) => `  ${context.dataset.label}: ${context.parsed.y.toLocaleString('id-ID')}`
+                    }
+                }
+            },
+            scales: {
+                x: {
+                    stacked: true,
+                    grid: {display: false, drawBorder: false},
+                    ticks: {
+                        font: {size: 12, weight: '600'},
+                        color: '#475569',
+                    }
+                },
+                y: {
+                    stacked: true,
+                    beginAtZero: true,
+                    grid: {color: '#f1f5f9', drawBorder: false},
+                    ticks: {
+                        font: {size: 11},
+                        color: '#64748b',
+                        callback: (val) => val >= 1000 ? (val / 1000) + 'k' : val
+                    }
+                }
+            }
+        }
+    });
+};
+
+// chart Sebaran Fakultas
+window.initSebaranFakultasChart = function (ChartLibrary) {
+    const root = document.querySelector('[data-fakultas-root]');
+    if (!root) return;
+
+    const rawData = JSON.parse(root.getAttribute('data-payload'));
+    const canvas = root.querySelector('[data-fakultas-chart]');
+    const ctx = canvas?.getContext('2d');
+
+    if (!ctx || !rawData || !Array.isArray(rawData)) return;
+
+    const fullNames = rawData.map(item => item.name || '-');
+    const dataLaki = rawData.map(item => parseInt(item.laki_laki || 0, 10));
+    const dataPerempuan = rawData.map(item => parseInt(item.perempuan || 0, 10));
+    const totals = rawData.map(item => parseInt(item.total || 0, 10));
+
+    const shortLabels = fullNames.map(name => {
+        if (name.includes('Teknik')) return 'FT';
+        if (name.includes('Hukum')) return 'FH';
+        if (name.includes('Pertanian')) return 'FP';
+        if (name.includes('Kedokteran')) return 'FKIK';
+        if (name.includes('Ekonomi')) return 'FEB';
+        if (name.includes('Sosial')) return 'FISIP';
+        if (name.includes('Keguruan')) return 'FKIP';
+        if (name.includes('Pascasarjana')) return 'Pascasarjana';
+
+        const words = name.replace(/Fakultas | dan /gi, '').split(' ');
+        return words.length > 1
+            ? (words[0][0] + words[1][0]).toUpperCase()
+            : name.slice(0, 3).toUpperCase();
+    });
+
+    const fakultasNumbersPlugin = {
+        id: 'fakultasNumbers',
+        afterDatasetsDraw(chart) {
+            const {ctx, data, scales: {x}} = chart;
+            ctx.save();
+            ctx.textAlign = 'center';
+            ctx.font = '700 11px sans-serif';
+            ctx.fillStyle = '#1f2937';
+            ctx.textBaseline = 'bottom';
+
+            for (let i = 0; i < data.labels.length; i++) {
+                let total = 0;
+                let minTopY = chart.chartArea.bottom;
+
+                chart.data.datasets.forEach((dataset, dsIdx) => {
+                    const meta = chart.getDatasetMeta(dsIdx);
+                    if (!meta.hidden) {
+                        const val = dataset.data[i] || 0;
+                        total += val;
+                        const bar = meta.data[i];
+                        if (bar && val > 0 && bar.y < minTopY) {
+                            minTopY = bar.y;
+                        }
+                    }
+                });
+
+                if (total > 0 && minTopY < chart.chartArea.bottom) {
+                    ctx.fillText(total.toLocaleString('id-ID'), x.getPixelForValue(i), minTopY - 6);
+                }
+            }
+            ctx.restore();
+        }
+    };
+
+    new ChartLibrary(ctx, {
+        type: 'bar',
+        plugins: [fakultasNumbersPlugin],
+        data: {
+            labels: shortLabels,
+            datasets: [
+                {
+                    label: 'Laki-laki',
+                    data: dataLaki,
+                    backgroundColor: '#ADD8E6',
+                    borderWidth: 0,
+                    maxBarThickness: 48,
+                },
+                {
+                    label: 'Perempuan',
+                    data: dataPerempuan,
+                    backgroundColor: '#4169E1',
+                    borderWidth: 0,
+                    borderRadius: 0,
+                    maxBarThickness: 48,
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            layout: {padding: {top: 25}},
+            animation: {duration: 800, easing: 'easeOutQuart'},
+            interaction: {mode: 'index', intersect: false},
+            plugins: {
+                legend: {
+                    display: true,
+                    position: 'bottom',
+                    labels: {
+                        usePointStyle: true,
+                        boxWidth: 8,
+                        font: {size: 11, weight: '600'},
+                        color: '#475569',
+                        padding: 15
+                    }
+                },
+                tooltip: {
+                    backgroundColor: 'rgba(15, 23, 42, 0.92)',
+                    titleFont: {size: 13, weight: 'bold'},
+                    bodyFont: {size: 13},
+                    padding: 12,
+                    cornerRadius: 8,
+                    callbacks: {
+                        title: (tooltipItems) => fullNames[tooltipItems[0].dataIndex],
+                        label: (context) => `  ${context.dataset.label}: ${context.parsed.y.toLocaleString('id-ID')}`,
+                        footer: (tooltipItems) => {
+                            let total = 0;
+                            tooltipItems.forEach(item => {
+                                total += item.parsed.y;
+                            });
+                            return `\n  Total: ${total.toLocaleString('id-ID')} Mahasiswa`;
+                        }
+                    }
+                }
+            },
+            scales: {
+                x: {
+                    stacked: true,
+                    grid: {display: false, drawBorder: false},
+                    ticks: {
+                        font: {size: 12, weight: '600'},
+                        color: '#475569',
+                    }
+                },
+                y: {
+                    stacked: true,
+                    beginAtZero: true,
+                    grid: {color: '#f1f5f9', drawBorder: false},
+                    ticks: {
+                        font: {size: 11},
+                        color: '#64748b',
+                        callback: (val) => val >= 1000 ? (val / 1000) + 'k' : val
+                    }
+                }
+            }
+        }
+    });
+};
+
+// Nav mobile
+function initMobileMenu() {
+    const mobileMenuButton = document.querySelector('[data-mobile-menu-button]');
+    const mobileMenu = document.querySelector('[data-mobile-menu]');
+
+    if (!mobileMenuButton || !mobileMenu) return;
+
     const openIcon = mobileMenuButton.querySelector('[data-menu-open-icon]');
     const closeIcon = mobileMenuButton.querySelector('[data-menu-close-icon]');
 
@@ -266,6 +562,7 @@ if (mobileMenuButton && mobileMenu) {
     });
 }
 
+// Agent Drawer
 function initTirtaAgentDrawer() {
     const shell = document.querySelector('[data-tirta-chat-shell]');
     const panel = document.querySelector('[data-tirta-chat-panel]');
@@ -273,9 +570,7 @@ function initTirtaAgentDrawer() {
     const openButtons = document.querySelectorAll('[data-tirta-chat-open]');
     const closeButtons = document.querySelectorAll('[data-tirta-chat-close]');
 
-    if (!shell || !panel || openButtons.length === 0) {
-        return;
-    }
+    if (!shell || !panel || openButtons.length === 0) return;
 
     const openDrawer = () => {
         shell.classList.remove('hidden');
@@ -311,6 +606,7 @@ function initTirtaAgentDrawer() {
     });
 }
 
+// Agent
 function initTirtaAgentChats() {
     document.querySelectorAll('[data-tirta-chat]').forEach((chat) => {
         const form = chat.querySelector('[data-tirta-form]');
@@ -324,14 +620,12 @@ function initTirtaAgentChats() {
         const resetButtons = document.querySelectorAll('[data-tirta-chat-reset]');
         let conversationId = window.sessionStorage.getItem('tirta_agent_conversation_id');
 
-        if (!form || !input || !messages || !submit || !status) {
-            return;
-        }
+        if (!form || !input || !messages || !submit || !status) return;
+
         const sendIcon = submit.querySelector('[data-send-icon]');
         const sendSpinner = submit.querySelector('[data-send-spinner]');
 
         const renderMarkdown = (content) => {
-            console.log(window.marked);
             if (window.marked && typeof window.marked.parse === 'function') {
                 try {
                     const html = window.marked.parse(content);
@@ -407,18 +701,17 @@ function initTirtaAgentChats() {
             });
 
             bubble.appendChild(time);
-            
+
             if (typing && typing.parentNode === messages) {
                 messages.insertBefore(row, typing);
             } else {
                 messages.appendChild(row);
             }
-            
+
             scrollToBottom();
         };
 
         const setLoading = (isLoading) => {
-
             submit.disabled = isLoading;
             input.disabled = isLoading;
             status.textContent = isLoading ? 'TirtaAgent sedang menjawab...' : '';
@@ -429,15 +722,8 @@ function initTirtaAgentChats() {
                 scrollToBottom();
             }
 
-            sendIcon?.classList.toggle(
-                'hidden',
-                isLoading
-            );
-
-            sendSpinner?.classList.toggle(
-                'hidden',
-                !isLoading
-            );
+            sendIcon?.classList.toggle('hidden', isLoading);
+            sendSpinner?.classList.toggle('hidden', !isLoading);
         };
 
         const resetConversation = () => {
@@ -454,12 +740,8 @@ function initTirtaAgentChats() {
 
         form.addEventListener('submit', async (event) => {
             event.preventDefault();
-
             const message = input.value.trim();
-
-            if (!message) {
-                return;
-            }
+            if (!message) return;
 
             addMessage(message, 'user');
             input.value = '';
@@ -526,3 +808,24 @@ function initTirtaAgentChats() {
         autosizeInput();
     });
 }
+
+
+// init
+document.addEventListener('DOMContentLoaded', () => {
+    if (typeof window.initStatistikMahasiswaCharts === 'function') {
+        window.initStatistikMahasiswaCharts(Chart);
+    }
+
+    if (typeof window.initJumlahPeminatChart === 'function') {
+        window.initJumlahPeminatChart(Chart);
+    }
+
+    if (typeof window.initSebaranFakultasChart === 'function') {
+        window.initSebaranFakultasChart(Chart);
+    }
+
+
+    initMobileMenu();
+    initTirtaAgentDrawer();
+    initTirtaAgentChats();
+});
