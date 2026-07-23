@@ -1,44 +1,44 @@
 @props([
-    'title' => 'Judul Statistik',
-    'value' => null,
+    'title',
+    'value',
     'href' => null,
-    'cardBg' => 'bg-white',
-    'iconBg' => 'bg-blue-50',
-    'iconColor' => 'text-blue-600',
-    'iconClass' => 'fa-solid fa-clock',
+    'iconClass',
+    'badgeText',
+    'badgeColor',
+    'footerText'
 ])
 
-<div
-    {{ $attributes->merge(['class' => 'group rounded-2xl border border-gray-200 ' . $cardBg . ' p-5 shadow-sm transition hover:-translate-y-1 hover:shadow-md']) }}>
-    <div class="flex items-start justify-between gap-2">
-        <div class="min-w-0">
-            <p class="text-sm font-semibold text-white/50">
-                {{ $title }}
-            </p>
-
-            <h3 class="mt-3 text-3xl font-extrabold tracking-tight text-white">
-                @if ($value === null)
-                    —
-                @else
-                    {{ number_format($value, 0, ',', '.') }}
+@if($href)
+    <a href="{{ $href }}" class="block group h-full cursor-pointer">
+        @else
+            <div class="block h-full">
                 @endif
-            </h3>
-        </div>
 
-        <div
-            class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl {{ $iconBg }} {{ $iconColor }}">
-            @isset($icon)
-                {{ $icon }}
-            @else
-                <i class="{{ $iconClass }} text-lg" aria-hidden="true"></i>
-            @endisset
-        </div>
-    </div>
+                <div
+                    class="bg-white rounded-lg border border-gray-200 p-5 shadow-sm h-full flex flex-col justify-between hover:shadow-md transition-shadow duration-200">
 
-    @if ($href)
-        <a href="{{ $href }}"
-            class="mt-5 inline-flex items-center gap-2 text-sm font-bold text-white/50 hover:text-white">
-            Lihat detail <span aria-hidden="true">→</span>
-        </a>
-    @endif
-</div>
+                    <div class="flex justify-between items-start">
+                        <h3 class="text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                            {{ $title }}
+                        </h3>
+                        <div class="text-gray-400 group-hover:text-gray-600 transition-colors">
+                            <i class="{{ $iconClass }} text-lg"></i>
+                        </div>
+                    </div>
+                    <div class="mt-3">
+                        <h2 class="text-3xl font-bold text-gray-800">
+                            {{ is_numeric($value) ? number_format($value, 0, ',', '.') : $value }}
+                        </h2>
+                    </div>
+
+                    <div class="mt-4 flex items-center gap-2">
+                        <span
+                            class="{{ $badgeColor }} text-white text-[10px] font-bold px-1.5 py-0.5 rounded leading-none">{{ $badgeText }}</span>
+                        <span class="text-xs text-gray-400">{{ $footerText }}</span>
+                    </div>
+                </div>
+            @if($href)
+    </a>
+    @else
+        </div>
+@endif
