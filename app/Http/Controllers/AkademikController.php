@@ -19,12 +19,10 @@ class AkademikController extends Controller
 
     public function index(): View
     {
-
         $waktuSekarang = now();
         $tahunNow = now()->year;
         $tahunMulai = $tahunNow - 8;
         $tahunSelesai = $tahunNow - 1;
-
 
         $peminatPerJalur = Mahasiswa::selectRaw('angkatan, count(*) as total')
             ->whereBetween('angkatan', [$tahunMulai, $tahunSelesai])
@@ -37,37 +35,36 @@ class AkademikController extends Controller
         for ($tahun = $tahunMulai; $tahun <= $tahunSelesai; $tahun++) {
             $chartPeminat[$tahun] = [
                 'Seleksi Nasional' => Mahasiswa::where('angkatan', $tahun)
-                    ->whereIn('jalur_masuk_id', ['snbp', 'snbt', 'snmptn', 'sbmptn']) //4
-                    ->count(),
-
+                    ->whereIn('jalur_masuk_id', ['snbp', 'snbt', 'snmptn', 'sbmptn'])->count(),
                 'Seleksi Mandiri' => Mahasiswa::where('angkatan', $tahun)
-                    ->whereIn('jalur_masuk_id', ['sm', 'ujian-mandiri', 'smmptn-barat', 'seleksi-mandiri-berdasarkan-test', 'smptn', 'umb']) //6
-                    ->count(),
-
+                    ->whereIn('jalur_masuk_id', ['sm', 'ujian-mandiri', 'smmptn-barat', 'seleksi-mandiri-berdasarkan-test', 'smptn', 'umb'])->count(),
                 'Lainnya' => Mahasiswa::where('angkatan', $tahun)
-                    ->whereNotIn('jalur_masuk_id', ['snbp', 'snbt', 'snmptn', 'sbmptn', 'smptn', 'sm', 'ujian-mandiri', 'smmptn-barat', 'seleksi-mandiri-berdasarkan-test', 'umb']) //10
-                    ->count(),
+                    ->whereNotIn('jalur_masuk_id', ['snbp', 'snbt', 'snmptn', 'sbmptn', 'smptn', 'sm', 'ujian-mandiri', 'smmptn-barat', 'seleksi-mandiri-berdasarkan-test', 'umb'])->count(),
             ];
         }
-
 
         $tahunAktif = $waktuSekarang->month < 7 ? $waktuSekarang->year - 1 : $waktuSekarang->year;
         $tahunLalu = $tahunAktif - 1;
 
-
         $kodeSemesterSekarang = ($tahunAktif - 1) . '2';
         $kodeSemesterLalu = ($tahunAktif - 1) . '1';
+        $tahunLaluStr = substr($kodeSemesterLalu, 0, 4);
+        $tipeSemester = substr($kodeSemesterLalu, -1) == '1' ? 'Ganjil' : 'Genap';
+        $kodeSemesterLaluString = $tipeSemester . ' ' . $tahunLaluStr;
 
-        $responseAktif = $this->aktifService->getData([]);
+        $responseAktif = $this->aktifService->getData(['semester' => $kodeSemesterSekarang]);
         $responseLulusan = $this->lulusanService->getData(['semester' => $kodeSemesterSekarang]);
         $responseLulusanLalu = $this->lulusanService->getData(['semester' => $kodeSemesterLalu]);
 
         $totalAktifSekarang = 0;
         $detailFakultasAktif = [];
+        $prodiAktifList = [];
 
-        if (isset($responseAktif['status']) && $responseAktif['status'] === true) {
-            $totalAktifSekarang = $responseAktif['total_mahasiswa'] ?? 0;
-            $detailFakultasAktif = $responseAktif['detail_per_fakultas'] ?? [];
+        if ((isset($responseAktif['status']) && $responseAktif['status'] === true) || 
+            (isset($responseAktif['tersedia']) && $responseAktif['tersedia'] === true)) {
+            $totalAktifSekarang = $responseAktif['total_mahasiswa'] ?? $responseAktif['total'] ?? 0;
+            $detailFakultasAktif = $responseAktif['detail_per_fakultas'] ?? $responseAktif['data'] ?? [];
+            $prodiAktifList = $responseAktif['detail_per_prodi'] ?? [];
         }
 
         $totalLulusanSekarang = 0;
@@ -91,6 +88,7 @@ class AkademikController extends Controller
         $totalTidakAktifSekarang = 0;
         $totalTidakAktifLalu = 0;
 
+        $trendAktif = $this->hitungTrend($totalAktifSekarang, $kodeSemesterLalu);
         $trendLulusan = $this->hitungTrend($totalLulusanSekarang, $totalLulusanLalu);
         $trendBaru = $this->hitungTrend($totalBaruSekarang, $totalBaruLalu);
         $trendTidakAktif = $this->hitungTrend($totalTidakAktifSekarang, $totalTidakAktifLalu);
@@ -100,9 +98,9 @@ class AkademikController extends Controller
                 'title' => 'TOTAL MAHASISWA',
                 'value' => $totalAktifSekarang,
                 'iconClass' => 'fa-regular fa-user',
-                'badgeText' => null,
-                'badgeColor' => null,
-                'footerText' => null,
+                'badgeText' => $trendAktif['text'],
+                'badgeColor' => $trendAktif['color'],
+                'footerText' => "Semester $kodeSemesterLaluString",
                 'href' => null,
             ],
             [
@@ -111,7 +109,7 @@ class AkademikController extends Controller
                 'iconClass' => 'fa-regular fa-clock',
                 'badgeText' => $trendTidakAktif['text'],
                 'badgeColor' => $trendTidakAktif['color'],
-                'footerText' => 'Dari tahun sebelumnya',
+                'footerText' => 'Tahun Sebelumnya',
                 'href' => null,
             ],
             [
@@ -120,7 +118,7 @@ class AkademikController extends Controller
                 'iconClass' => 'fa-solid fa-arrow-up-right-from-square',
                 'badgeText' => $trendLulusan['text'],
                 'badgeColor' => $trendLulusan['color'],
-                'footerText' => 'dari semester sebelumnya',
+                'footerText' => 'Semester ' . $kodeSemesterLaluString,
                 'href' => route('akademik.mahasiswa-lulus'),
             ],
             [
@@ -129,147 +127,142 @@ class AkademikController extends Controller
                 'iconClass' => 'fa-regular fa-heart',
                 'badgeText' => $trendBaru['text'],
                 'badgeColor' => $trendBaru['color'],
-                'footerText' => 'dari angkatan ' . $tahunLalu,
+                'footerText' => 'Angkatan ' . $tahunLalu,
                 'href' => null,
             ],
         ];
 
-        $fakultasAktifMap = collect($detailFakultasAktif)->keyBy('nama_fakultas');
-        $fakultasLulusMap = collect($detailFakultasLulus)->pluck('jumlah_mahasiswa_lulus', 'nama_fakultas');
+        $fakultasAktifMap = collect($detailFakultasAktif)->keyBy(function ($item) {
+            return strtolower(trim($item['nama_fakultas'] ?? ''));
+        });
+        $fakultasLulusMap = collect($detailFakultasLulus)->mapWithKeys(function ($item) {
+            return [strtolower(trim($item['nama_fakultas'] ?? '')) => $item['jumlah_mahasiswa_lulus'] ?? 0];
+        });
+
+        $getStatFakultas = function ($map, $namaFakultas, $key) {
+            $normalizedName = strtolower(trim($namaFakultas));
+            $data = $map->get($normalizedName);
+            return $data[$key] ?? 0;
+        };
 
         $fakultas = [
             [
                 'name' => 'Fakultas Kedokteran dan Ilmu Kesehatan',
-                'total' => $fakultasAktifMap->get('Fakultas Kedokteran dan Ilmu Kesehatan')['jumlah_mahasiswa_aktif'] ?? 0,
-                'laki_laki' => $fakultasAktifMap->get('Fakultas Kedokteran dan Ilmu Kesehatan')['jumlah_laki_laki'] ?? 0,
-                'perempuan' => $fakultasAktifMap->get('Fakultas Kedokteran dan Ilmu Kesehatan')['jumlah_perempuan'] ?? 0,
-                'total_lulus' => $fakultasLulusMap->get('Fakultas Kedokteran dan Ilmu Kesehatan', 0),
+                'total' => $getStatFakultas($fakultasAktifMap, 'Fakultas Kedokteran dan Ilmu Kesehatan', 'jumlah_mahasiswa_aktif'),
+                'laki_laki' => $getStatFakultas($fakultasAktifMap, 'Fakultas Kedokteran dan Ilmu Kesehatan', 'jumlah_laki_laki'),
+                'perempuan' => $getStatFakultas($fakultasAktifMap, 'Fakultas Kedokteran dan Ilmu Kesehatan', 'jumlah_perempuan'),
+                'total_lulus' => $fakultasLulusMap->get(strtolower('Fakultas Kedokteran dan Ilmu Kesehatan'), 0),
                 'icon' => 'fa-solid fa-stethoscope',
                 'color' => 'text-blue-600',
             ],
             [
                 'name' => 'Fakultas Pertanian',
-                'total' => $fakultasAktifMap->get('Fakultas Pertanian')['jumlah_mahasiswa_aktif'] ?? 0,
-                'laki_laki' => $fakultasAktifMap->get('Fakultas Pertanian')['jumlah_laki_laki'] ?? 0,
-                'perempuan' => $fakultasAktifMap->get('Fakultas Pertanian')['jumlah_perempuan'] ?? 0,
-                'total_lulus' => $fakultasLulusMap->get('Fakultas Pertanian', 0),
+                'total' => $getStatFakultas($fakultasAktifMap, 'Fakultas Pertanian', 'jumlah_mahasiswa_aktif'),
+                'laki_laki' => $getStatFakultas($fakultasAktifMap, 'Fakultas Pertanian', 'jumlah_laki_laki'),
+                'perempuan' => $getStatFakultas($fakultasAktifMap, 'Fakultas Pertanian', 'jumlah_perempuan'),
+                'total_lulus' => $fakultasLulusMap->get(strtolower('Fakultas Pertanian'), 0),
                 'icon' => 'fa-solid fa-seedling',
                 'color' => 'text-green-600',
             ],
             [
                 'name' => 'Fakultas Hukum',
-                'total' => $fakultasAktifMap->get('Fakultas Hukum')['jumlah_mahasiswa_aktif'] ?? 0,
-                'laki_laki' => $fakultasAktifMap->get('Fakultas Hukum')['jumlah_laki_laki'] ?? 0,
-                'perempuan' => $fakultasAktifMap->get('Fakultas Hukum')['jumlah_perempuan'] ?? 0,
-                'total_lulus' => $fakultasLulusMap->get('Fakultas Hukum', 0),
+                'total' => $getStatFakultas($fakultasAktifMap, 'Fakultas Hukum', 'jumlah_mahasiswa_aktif'),
+                'laki_laki' => $getStatFakultas($fakultasAktifMap, 'Fakultas Hukum', 'jumlah_laki_laki'),
+                'perempuan' => $getStatFakultas($fakultasAktifMap, 'Fakultas Hukum', 'jumlah_perempuan'),
+                'total_lulus' => $fakultasLulusMap->get(strtolower('Fakultas Hukum'), 0),
                 'icon' => 'fa-solid fa-gavel',
                 'color' => 'text-red-600',
             ],
             [
                 'name' => 'Fakultas Teknik',
-                'total' => $fakultasAktifMap->get('Fakultas Teknik')['jumlah_mahasiswa_aktif'] ?? 0,
-                'laki_laki' => $fakultasAktifMap->get('Fakultas Teknik')['jumlah_laki_laki'] ?? 0,
-                'perempuan' => $fakultasAktifMap->get('Fakultas Teknik')['jumlah_perempuan'] ?? 0,
-                'total_lulus' => $fakultasLulusMap->get('Fakultas Teknik', 0),
+                'total' => $getStatFakultas($fakultasAktifMap, 'Fakultas Teknik', 'jumlah_mahasiswa_aktif'),
+                'laki_laki' => $getStatFakultas($fakultasAktifMap, 'Fakultas Teknik', 'jumlah_laki_laki'),
+                'perempuan' => $getStatFakultas($fakultasAktifMap, 'Fakultas Teknik', 'jumlah_perempuan'),
+                'total_lulus' => $fakultasLulusMap->get(strtolower('Fakultas Teknik'), 0),
                 'icon' => 'fa-solid fa-gears',
                 'color' => 'text-yellow-500',
             ],
             [
                 'name' => 'Fakultas Ekonomi dan Bisnis',
-                'total' => $fakultasAktifMap->get('Fakultas Ekonomi dan Bisnis')['jumlah_mahasiswa_aktif'] ?? 0,
-                'laki_laki' => $fakultasAktifMap->get('Fakultas Ekonomi dan Bisnis')['jumlah_laki_laki'] ?? 0,
-                'perempuan' => $fakultasAktifMap->get('Fakultas Ekonomi dan Bisnis')['jumlah_perempuan'] ?? 0,
-                'total_lulus' => $fakultasLulusMap->get('Fakultas Ekonomi dan Bisnis', 0),
+                'total' => $getStatFakultas($fakultasAktifMap, 'Fakultas Ekonomi dan Bisnis', 'jumlah_mahasiswa_aktif'),
+                'laki_laki' => $getStatFakultas($fakultasAktifMap, 'Fakultas Ekonomi dan Bisnis', 'jumlah_laki_laki'),
+                'perempuan' => $getStatFakultas($fakultasAktifMap, 'Fakultas Ekonomi dan Bisnis', 'jumlah_perempuan'),
+                'total_lulus' => $fakultasLulusMap->get(strtolower('Fakultas Ekonomi dan Bisnis'), 0),
                 'icon' => 'fa-solid fa-briefcase',
                 'color' => 'text-green-500',
             ],
             [
                 'name' => 'Fakultas Ilmu Sosial dan Ilmu Politik',
-                'total' => $fakultasAktifMap->get('Fakultas Ilmu Sosial dan Ilmu Politik')['jumlah_mahasiswa_aktif'] ?? 0,
-                'laki_laki' => $fakultasAktifMap->get('Fakultas Ilmu Sosial dan Ilmu Politik')['jumlah_laki_laki'] ?? 0,
-                'perempuan' => $fakultasAktifMap->get('Fakultas Ilmu Sosial dan Ilmu Politik')['jumlah_perempuan'] ?? 0,
-                'total_lulus' => $fakultasLulusMap->get('Fakultas Ilmu Sosial dan Ilmu Politik', 0),
+                'total' => $getStatFakultas($fakultasAktifMap, 'Fakultas Ilmu Sosial dan Ilmu Politik', 'jumlah_mahasiswa_aktif'),
+                'laki_laki' => $getStatFakultas($fakultasAktifMap, 'Fakultas Ilmu Sosial dan Ilmu Politik', 'jumlah_laki_laki'),
+                'perempuan' => $getStatFakultas($fakultasAktifMap, 'Fakultas Ilmu Sosial dan Ilmu Politik', 'jumlah_perempuan'),
+                'total_lulus' => $fakultasLulusMap->get(strtolower('Fakultas Ilmu Sosial dan Ilmu Politik'), 0),
                 'icon' => 'fa-solid fa-handshake',
                 'color' => 'text-fuchsia-500',
             ],
             [
                 'name' => 'Fakultas Keguruan dan Ilmu Pendidikan',
-                'total' => $fakultasAktifMap->get('Fakultas Keguruan dan Ilmu Pendidikan')['jumlah_mahasiswa_aktif'] ?? 0,
-                'laki_laki' => $fakultasAktifMap->get('Fakultas Keguruan dan Ilmu Pendidikan')['jumlah_laki_laki'] ?? 0,
-                'perempuan' => $fakultasAktifMap->get('Fakultas Keguruan dan Ilmu Pendidikan')['jumlah_perempuan'] ?? 0,
-                'total_lulus' => $fakultasLulusMap->get('Fakultas Keguruan dan Ilmu Pendidikan', 0),
+                'total' => $getStatFakultas($fakultasAktifMap, 'Fakultas Keguruan dan Ilmu Pendidikan', 'jumlah_mahasiswa_aktif'),
+                'laki_laki' => $getStatFakultas($fakultasAktifMap, 'Fakultas Keguruan dan Ilmu Pendidikan', 'jumlah_laki_laki'),
+                'perempuan' => $getStatFakultas($fakultasAktifMap, 'Fakultas Keguruan dan Ilmu Pendidikan', 'jumlah_perempuan'),
+                'total_lulus' => $fakultasLulusMap->get(strtolower('Fakultas Keguruan dan Ilmu Pendidikan'), 0),
                 'icon' => 'fa-solid fa-person-chalkboard',
                 'color' => 'text-indigo-600',
             ],
             [
                 'name' => 'Pascasarjana',
-                'total' => $fakultasAktifMap->get('Pascasarjana')['jumlah_mahasiswa_aktif'] ?? 0,
-                'laki_laki' => $fakultasAktifMap->get('Pascasarjana')['jumlah_laki_laki'] ?? 0,
-                'perempuan' => $fakultasAktifMap->get('Pascasarjana')['jumlah_perempuan'] ?? 0,
-                'total_lulus' => $fakultasLulusMap->get('Pascasarjana', 0),
+                'total' => $getStatFakultas($fakultasAktifMap, 'Pascasarjana', 'jumlah_mahasiswa_aktif'),
+                'laki_laki' => $getStatFakultas($fakultasAktifMap, 'Pascasarjana', 'jumlah_laki_laki'),
+                'perempuan' => $getStatFakultas($fakultasAktifMap, 'Pascasarjana', 'jumlah_perempuan'),
+                'total_lulus' => $fakultasLulusMap->get(strtolower('Pascasarjana'), 0),
                 'icon' => 'fa-solid fa-graduation-cap',
                 'color' => 'text-violet-600',
             ],
         ];
 
         $collectionFakultas = collect($fakultas);
-
-        $fakultasTerbanyak = $collectionFakultas->sortByDesc('total')->first() ?? ['name' => '-', 'total' => 0];
-        $fakultasSedikit = $collectionFakultas->sortBy('total')->first() ?? ['name' => '-', 'total' => 0];
-        $fakultasLulusTerbanyak = $collectionFakultas->sortByDesc('total_lulus')->first() ?? ['name' => '-', 'total_lulus' => 0];
-
         $maxTotalMahasiswa = $collectionFakultas->max(function ($item) {
             return (int)($item['total'] ?? 0) + (int)($item['total_lulus'] ?? 0);
         });
 
-        $prodiAktifList = $responseAktif['detail_per_prodi'] ?? [];
-        $collectionProdiAktif = collect($prodiAktifList);
-        $collectionProdiLulus = collect($prodiLulusList);
+        $prodiS1Aktif = collect($prodiAktifList)->filter(function ($item) {
+            $jenjang = strtolower(trim($item['jenjang'] ?? ''));
+            return in_array($jenjang, ['s1', 'sarjana', 'strata 1', 'sarjana (s1)']);
+        });
 
-        $prodiTerbanyak = Mahasiswa::with('prodi')
-            ->whereHas('prodi', function ($query) {
-                $query->whereIn('jenjang', ['Sarjana', 'S1']);
-            })
-            ->selectRaw('prodi_id, count(*) as total')
-            ->groupBy('prodi_id')
-            ->orderByDesc('total')
-            ->first();
+        $prodiS1Lulus = collect($prodiLulusList)->filter(function ($item) {
+            $jenjang = strtolower(trim($item['jenjang'] ?? ''));
+            return in_array($jenjang, ['s1', 'sarjana', 'strata 1', 'sarjana (s1)']);
+        });
 
-        $jurusanTerbanyak = [
-            'nama_prodi' => $prodiTerbanyak->prodi->nama_prodi ?? '-',
-            'jumlah_mahasiswa_aktif' => $prodiTerbanyak->total ?? 0
-        ];
+        $prodiTerbanyakS1 = $prodiS1Aktif->sortByDesc('jumlah_mahasiswa_aktif')->first() 
+            ?? ['nama_prodi' => '-', 'jumlah_mahasiswa_aktif' => 0];
 
-        $prodiSedikit = Mahasiswa::with('prodi')
-            ->whereNotNull('prodi_id')
-            ->whereHas('prodi', function ($query) {
-                $query->whereNotNull('nama_prodi')
-                    ->where('nama_prodi', '!=', 'Tidak')
-                    ->whereIn('jenjang', ['Sarjana', 'S1']);
-            })
-            ->selectRaw('prodi_id, count(*) as total')
-            ->groupBy('prodi_id')
-            ->orderBy('total', 'asc')
-            ->first();
+        $prodiSedikitS1 = $prodiS1Aktif->where('jumlah_mahasiswa_aktif', '>', 0)
+            ->sortBy('jumlah_mahasiswa_aktif')->first() 
+            ?? ['nama_prodi' => '-', 'jumlah_mahasiswa_aktif' => 0];
 
-        $jurusanSedikit = [
-            'nama_prodi' => $prodiSedikit->prodi->nama_prodi ?? '-',
-            'jumlah_mahasiswa_aktif' => $prodiSedikit->total ?? 0
-        ];
-
-        $jurusanLulusTerbanyak = $collectionProdiLulus->sortByDesc('jumlah_mahasiswa_lulus')->first() ?? ['nama_prodi' => '-', 'jumlah_mahasiswa_lulus' => 0];
+        $prodiLulusTerbanyakS1 = $prodiS1Lulus->sortByDesc('jumlah_mahasiswa_lulus')->first() 
+            ?? ['nama_prodi' => '-', 'jumlah_mahasiswa_lulus' => 0];
 
         return view('akademik', [
             'title' => 'Akademik',
             'datas' => $datas,
             'fakultas' => $fakultas,
-            'fakultasTerbanyak' => $fakultasTerbanyak,
-            'fakultasSedikit' => $fakultasSedikit,
-            'fakultasLulusTerbanyak' => $fakultasLulusTerbanyak,
             'maxTotalMahasiswa' => $maxTotalMahasiswa > 0 ? $maxTotalMahasiswa : 1,
-            'jurusanTerbanyak' => $jurusanTerbanyak,
-            'jurusanSedikit' => $jurusanSedikit,
-            'jurusanLulusTerbanyak' => $jurusanLulusTerbanyak,
+            'jurusanTerbanyak' => [
+                'nama_prodi' => $prodiTerbanyakS1['nama_prodi'],
+                'jumlah_mahasiswa_aktif' => $prodiTerbanyakS1['jumlah_mahasiswa_aktif']
+            ],
+            'jurusanSedikit' => [
+                'nama_prodi' => $prodiSedikitS1['nama_prodi'],
+                'jumlah_mahasiswa_aktif' => $prodiSedikitS1['jumlah_mahasiswa_aktif']
+            ],
+            'jurusanLulusTerbanyak' => [
+                'nama_prodi' => $prodiLulusTerbanyakS1['nama_prodi'],
+                'jumlah_mahasiswa_lulus' => $prodiLulusTerbanyakS1['jumlah_mahasiswa_lulus']
+            ],
+            
             'jumlahPeminat' => $peminatPerJalur,
             'chartPeminat' => $chartPeminat,
         ]);

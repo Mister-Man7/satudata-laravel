@@ -16,15 +16,8 @@
 
         <div class="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
             @forelse ($daftarStatistik as $data)
-                <x-ui.akademik-card
-                    :title="$data['title']"
-                    :value="$data['value']"
-                    :href="$data['href']"
-                    :icon-class="$data['iconClass']"
-                    :badge-text="$data['badgeText']"
-                    :badge-color="$data['badgeColor']"
-                    :footer-text="$data['footerText']"
-                />
+                <x-ui.akademik-card :title="$data['title']" :value="$data['value']" :href="$data['href']" :icon-class="$data['iconClass']"
+                    :badge-text="$data['badgeText']" :badge-color="$data['badgeColor']" :footer-text="$data['footerText']" />
             @empty
                 <div
                     class="col-span-full rounded-2xl border border-amber-200 bg-amber-50 p-5 text-sm font-semibold text-amber-700">
@@ -39,8 +32,7 @@
         <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
 
             <div class="lg:col-span-9 bg-white rounded-2xl border border-gray-100 shadow-sm p-6 sm:p-8 flex flex-col"
-                 data-fakultas-root
-                 data-payload="{{ json_encode($fakultas) }}">
+                data-fakultas-root data-payload="{{ json_encode($fakultas) }}">
 
                 <div class="flex justify-between items-start mb-6">
                     <div>
@@ -53,7 +45,6 @@
                     </div>
                 </div>
 
-                {{-- Wadah Canvas Chart.js --}}
                 <div class="relative w-full flex-1 min-h-[300px]">
                     <canvas data-fakultas-chart></canvas>
                 </div>
@@ -115,9 +106,8 @@
     </section>
 
     <section class="mx-auto max-w-screen-2xl px-4 py-4 sm:px-6 lg:px-8">
-        <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 sm:p-8 mt-6"
-             data-peminat-root
-             data-payload="{{ json_encode($chartPeminat) }}">
+        <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 sm:p-8 mt-6" data-peminat-root
+            data-payload="{{ json_encode($chartPeminat) }}">
 
             <div class="flex justify-between items-start mb-6">
                 <div>
@@ -134,15 +124,15 @@
                 <canvas data-peminat-chart></canvas>
             </div>
 
-            <div
-                class="mt-3 rounded-xl border border-blue-200/50 bg-blue-50/50 p-5 text-blue-900/50 shadow-sm">
+            <div class="mt-3 rounded-xl border border-blue-200/50 bg-blue-50/50 p-5 text-blue-900/50 shadow-sm">
                 <div class="flex items-start gap-2">
                     <i class="fa-solid fa-circle-info mt-0.5 text-lg text-black"></i>
                     <div>
                         <h4 class="font-bold text-blue-950">Keterangan:</h4>
                         <p class="mt-1 text-sm leading-relaxed text-blue-800">
                             <span class="block">- Seleksi Nasional = SNBP, SNBT, SNMPTN, dan SBMPTN </span>
-                            <span class="block">- Seleksi Mandiri = SMPTN, SMBT, SMMPTN-BARAT, Ujian Mandiri, Seleksi Mandiri, dan Ujian Mandiri Bersama</span>
+                            <span class="block">- Seleksi Mandiri = SMPTN, SMBT, SMMPTN-BARAT, Ujian Mandiri, Seleksi
+                                Mandiri, dan Ujian Mandiri Bersama</span>
                             <span class="block">- Lainnya</span>
                         </p>
                     </div>

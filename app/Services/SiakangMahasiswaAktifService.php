@@ -13,23 +13,40 @@ class SiakangMahasiswaAktifService
         $token = config('services.siakang.token');
 
         if (!is_string($baseUrl) || filter_var($baseUrl, FILTER_VALIDATE_URL) === false || empty($token)) {
-            return $this->hasilKosong();
+            dd([
+                'error' => 'Config tidak valid',
+                'base_url' => $baseUrl,
+                'is_valid_url' => filter_var($baseUrl, FILTER_VALIDATE_URL),
+                'token_empty' => empty($token)
+            ]);
         }
 
         $url = rtrim($baseUrl, '/') . '/v2/mahasiswa-aktif';
 
         try {
-            $response = Http::connectTimeout(5)
-                ->timeout(15)
+            $response = Http::connectTimeout(10)
+                ->timeout(60)
                 ->acceptJson()
+                ->withHeaders([
+            'User-Agent' => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+            'Accept-Language' => 'id-ID,id;q=0.9,en-US;q=0.8,en;q=0.7',
+        ])
                 ->withToken($token)
                 ->get($url, $parameter);
-        } catch (ConnectionException) {
-            return $this->hasilKosong();
+        } catch (ConnectionException $e) {
+            dd(['error' => 'Connection Exception / Timeout', 'message' => $e->getMessage()]);
         }
 
+        // 3. DEBUG RESPONS API
         if (!$response->successful() || (string)$response->json('status') !== '200') {
-            return $this->hasilKosong();
+            dd([
+                'error' => 'Respons HTTP Gagal atau Status JSON tidak 200',
+                'http_status_code' => $response->status(),
+                'json_status_value' => $response->json('status'),
+                'full_response_body' => $response->json() ?? $response->body(),
+                'url_called' => $url,
+                'param_sent' => $parameter
+            ]);
         }
 
         $data = $response->json('data', []);
