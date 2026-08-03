@@ -54,12 +54,24 @@ class SimpegPegawaiService
 
         $isiResponse = $response->json();
 
-        if (!is_array($isiResponse) || !isset($isiResponse['data']) || !is_array($isiResponse['data'])) {
+        if (!is_array($isiResponse)) {
             return $this->noResult();
         }
 
-        $dataPegawai = $isiResponse['data'];
-        $totalData = count($dataPegawai);
+        // Handle two endpoint formats:
+        // 1. New /employee endpoint: returns {status, total, message} directly
+        // 2. Old /pegawai endpoint: returns {data: [], status, message}
+        if (isset($isiResponse['total']) && is_numeric($isiResponse['total'])) {
+            // New endpoint format - /employee
+            $totalData = (int)$isiResponse['total'];
+            $dataPegawai = $isiResponse['data'] ?? [];
+        } elseif (isset($isiResponse['data']) && is_array($isiResponse['data'])) {
+            // Old endpoint format - /pegawai
+            $dataPegawai = $isiResponse['data'];
+            $totalData = count($dataPegawai);
+        } else {
+            return $this->noResult();
+        }
 
         $result = [
             'status' => true,
