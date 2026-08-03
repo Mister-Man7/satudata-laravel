@@ -142,3 +142,16 @@
     color: inherit;
     font-size: inherit;
 }
+.alert-info {
+    color: #205872;
+    background-color: #d8f1f8;
+    border-color: #c9ebf5;
+}
+
+.alert {
+    position: relative;
+    padding: .75rem 1.25rem;
+    margin-bottom: 1rem;
+    border: 1px solid transparent;
+    border-radius: .25rem;
+}

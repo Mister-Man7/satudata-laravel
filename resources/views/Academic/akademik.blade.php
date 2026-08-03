@@ -124,20 +124,35 @@
                 <canvas data-peminat-chart></canvas>
             </div>
 
-            <div class="mt-3 rounded-xl border border-blue-200/50 bg-blue-50/50 p-5 text-blue-900/50 shadow-sm">
-                <div class="flex items-start gap-2">
-                    <i class="fa-solid fa-circle-info mt-0.5 text-lg text-black"></i>
-                    <div>
-                        <h4 class="font-bold text-blue-950">Keterangan:</h4>
-                        <p class="mt-1 text-sm leading-relaxed text-blue-800">
-                            <span class="block">- Seleksi Nasional = SNBP, SNBT, SNMPTN, dan SBMPTN </span>
-                            <span class="block">- Seleksi Mandiri = SMPTN, SMBT, SMMPTN-BARAT, Ujian Mandiri, Seleksi
-                                Mandiri, dan Ujian Mandiri Bersama</span>
-                            <span class="block">- Lainnya</span>
-                        </p>
-                    </div>
+            <div class="mt-3 p-5 col-12">
+                <div class="alert alert-info" role="alert">
+                    <i class="mdi mdi-information-outline mr-1 text-info"></i>
+                    Seleksi Nasional dihitung dari SNBP, SNBT, SNMPTN, dan SBMPTN
+                </div>
+                <div class="alert alert-info" role="alert">
+                    <i class="mdi mdi-information-outline mr-1 text-info"></i>
+                    Seleksi Mandiri dihitung dari SMPTN, SMBT, SMMPTN-BARAT, Ujian Mandiri, Seleksi
+                    Mandiri, dan Ujian Mandiri Bersama
+                </div>
+                <div class="alert alert-info" role="alert">
+                    <i class="mdi mdi-information-outline mr-1 text-info"></i>
+                    Lainnya
                 </div>
             </div>
+
+            <div class="flex items-start gap-2">
+                <i class="fa-solid fa-circle-info mt-0.5 text-lg text-black"></i>
+                <div>
+                    <h4 class="font-bold text-blue-950">Keterangan:</h4>
+                    <p class="mt-1 text-sm leading-relaxed text-blue-800">
+                        <span class="block">- Seleksi Nasional = SNBP, SNBT, SNMPTN, dan SBMPTN </span>
+                        <span class="block">- Seleksi Mandiri = SMPTN, SMBT, SMMPTN-BARAT, Ujian Mandiri, Seleksi
+                            Mandiri, dan Ujian Mandiri Bersama</span>
+                        <span class="block">- Lainnya</span>
+                    </p>
+                </div>
+            </div>
+        </div>
         </div>
     </section>
 </x-layout>
