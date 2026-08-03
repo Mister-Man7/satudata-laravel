@@ -30,7 +30,6 @@ class MahasiswaLulusTable extends Component
     public function terapkanFilter(): void
     {
         $this->validate();
-
         $this->resetPage();
     }
 
@@ -43,7 +42,7 @@ class MahasiswaLulusTable extends Component
 
     public function render(SiakangLulusanService $lulusanService): View
     {
-        $hasilApi = $lulusanService->getData($this->parameterApi());
+        $hasilApi = $lulusanService->getListMahasiswa($this->parameterApi());
 
         return view('livewire.mahasiswa-lulus-table', [
             'result' => $hasilApi,
@@ -51,9 +50,6 @@ class MahasiswaLulusTable extends Component
         ]);
     }
 
-    /**
-     * @return array<string, int|string>
-     */
     private function parameterApi(): array
     {
         $parameter = [
@@ -61,29 +57,14 @@ class MahasiswaLulusTable extends Component
             'page' => $this->getPage(),
         ];
 
-        if ($this->search !== '') {
-            $parameter['search'] = $this->search;
-        }
-
-        if ($this->kode_prodi !== '') {
-            $parameter['kode_prodi'] = $this->kode_prodi;
-        }
-
-        if ($this->angkatan !== '') {
-            $parameter['angkatan'] = $this->angkatan;
-        }
-
-        if ($this->tahun_lulus !== '') {
-            $parameter['tahun_lulus'] = $this->tahun_lulus;
-        }
+        if ($this->search !== '') $parameter['search'] = $this->search;
+        if ($this->kode_prodi !== '') $parameter['kode_prodi'] = $this->kode_prodi;
+        if ($this->angkatan !== '') $parameter['angkatan'] = $this->angkatan;
+        if ($this->tahun_lulus !== '') $parameter['tahun_lulus'] = $this->tahun_lulus;
 
         return $parameter;
     }
 
-    /**
-     * @param array<string, mixed> $hasilApi
-     * @return LengthAwarePaginatorContract<int, mixed>
-     */
     private function buatPaginator(array $hasilApi): LengthAwarePaginatorContract
     {
         $dataMahasiswa = $hasilApi['data'] ?? [];
@@ -95,8 +76,8 @@ class MahasiswaLulusTable extends Component
         return new LengthAwarePaginator(
             items: new Collection($dataMahasiswa),
             total: (int)($hasilApi['total'] ?? 0),
-            perPage: 25,
-            currentPage: (int)($hasilApi['halaman_sekarang'] ?? $this->getPage()),
+            perPage: (int)($hasilApi['per_page'] ?? 15),
+            currentPage: (int)($hasilApi['current_page'] ?? $this->getPage()),
             options: [
                 'path' => route('akademik.mahasiswa-lulus'),
                 'pageName' => 'page',
@@ -104,9 +85,6 @@ class MahasiswaLulusTable extends Component
         );
     }
 
-    /**
-     * @return array<string, list<string>>
-     */
     protected function rules(): array
     {
         return [
