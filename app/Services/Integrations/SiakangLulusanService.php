@@ -2,6 +2,7 @@
 
 namespace App\Services\Integrations;
 
+use Exception;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Facades\Http;
 
@@ -81,7 +82,7 @@ class SiakangLulusanService
                 ])
                 ->get($url, $parameter);
 
-        } catch (\Exception $e) {
+        } catch (Exception $e) {
             return ['tersedia' => false, 'data' => [], 'total' => 0];
         }
 

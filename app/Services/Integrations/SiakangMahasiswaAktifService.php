@@ -37,7 +37,6 @@ class SiakangMahasiswaAktifService
             dd(['error' => 'Connection Exception / Timeout', 'message' => $e->getMessage()]);
         }
 
-        // 3. DEBUG RESPONS API
         if (!$response->successful() || (string)$response->json('status') !== '200') {
             dd([
                 'error' => 'Respons HTTP Gagal atau Status JSON tidak 200',
