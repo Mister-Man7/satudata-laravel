@@ -2,8 +2,8 @@
 
 namespace App\View\Components\Dashboard;
 
-use App\Services\SiakangLulusanService;
-use App\Services\SiakangMahasiswaAktifService;
+use App\Services\Integrations\SiakangLulusanService;
+use App\Services\Integrations\SiakangMahasiswaAktifService;
 use Closure;
 use Illuminate\Contracts\View\View;
 use Illuminate\View\Component;

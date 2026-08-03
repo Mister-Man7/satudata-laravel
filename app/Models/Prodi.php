@@ -22,7 +22,7 @@ class Prodi extends Model
         'fakultas_id',
     ];
 
-    public function mahasiswas()
+    public function mahasiswas(): \Illuminate\Database\Eloquent\Relations\HasMany
     {
         return $this->hasMany(Mahasiswa::class, 'prodi_id', 'id');
     }

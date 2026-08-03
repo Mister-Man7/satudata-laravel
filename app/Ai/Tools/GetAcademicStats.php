@@ -2,7 +2,7 @@
 
 namespace App\Ai\Tools;
 
-use App\Services\SiakangLulusanService;
+use App\Services\Integrations\SiakangLulusanService;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Laravel\Ai\Contracts\Tool;
 use Laravel\Ai\Tools\Request;

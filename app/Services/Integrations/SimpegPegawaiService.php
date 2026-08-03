@@ -1,8 +1,9 @@
 <?php
 
-namespace App\Services;
+namespace App\Services\Integrations;
 
 use Illuminate\Http\Client\ConnectionException;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 
 class SimpegPegawaiService
@@ -10,6 +11,12 @@ class SimpegPegawaiService
 
     public function getData(array $parameter = []): array
     {
+        $cacheKey = $this->buildCacheKey($parameter);
+
+        if (Cache::has($cacheKey)) {
+            return Cache::get($cacheKey);
+        }
+
         $baseUrl = config('services.simpeg.base_url');
         $apiKeyHeader = config('services.simpeg.key');
         $apiKeyValue = config('services.simpeg.value');
@@ -27,8 +34,8 @@ class SimpegPegawaiService
         }
 
         try {
-            $response = Http::connectTimeout(5)
-                ->timeout(30)
+            $response = Http::connectTimeout(3)
+                ->timeout(8)
                 ->acceptJson()
                 ->withHeaders([
                     'Accept-Language' => 'id-ID,id;q=0.9,en-US;q=0.8',
@@ -54,7 +61,7 @@ class SimpegPegawaiService
         $dataPegawai = $isiResponse['data'];
         $totalData = count($dataPegawai);
 
-        return [
+        $result = [
             'status' => true,
             'message' => 'Berhasil mengambil data pegawai',
             'data' => $dataPegawai,
@@ -62,6 +69,17 @@ class SimpegPegawaiService
             'halaman_sekarang' => 1,
             'halaman_terakhir' => 1,
         ];
+
+        Cache::put($cacheKey, $result, now()->addMinutes(5));
+
+        return $result;
+    }
+
+    private function buildCacheKey(array $parameter = []): string
+    {
+        ksort($parameter);
+
+        return 'simpeg_pegawai_' . md5(json_encode($parameter));
     }
 
     public function noResult(): array

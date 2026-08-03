@@ -3,7 +3,7 @@
 namespace App\Console\Commands;
 
 use App\Models\Mahasiswa;
-use App\Services\MahasiswaSyncService;
+use App\Services\Sync\MahasiswaSyncService;
 use Illuminate\Console\Attributes\Description;
 use Illuminate\Console\Attributes\Signature;
 use Illuminate\Console\Command;

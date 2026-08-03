@@ -76,10 +76,8 @@
             </a>
         </div>
 
-        {{-- Grid --}}
         <div class="grid grid-cols-1 gap-6 lg:grid-cols-2">
 
-            {{-- Panel kiri --}}
             <div class="rounded-3xl border border-gray-200 bg-white p-5 shadow-sm">
                 <div class="mb-5 flex items-center justify-between">
                     <div class="flex items-center gap-3">
@@ -108,7 +106,6 @@
                 </div>
 
                 <div class="space-y-4">
-                    {{-- Card item --}}
                     <a href="#"
                         class="group block rounded-2xl border border-gray-200 bg-white p-5 transition hover:-translate-y-0.5 hover:border-emerald-200 hover:shadow-md">
                         <div class="flex items-start justify-between gap-4">
@@ -174,7 +171,6 @@
                 </div>
             </div>
 
-            {{-- Panel kanan --}}
             <div class="rounded-3xl border border-gray-200 bg-white p-5 shadow-sm">
                 <div class="mb-5 flex items-center justify-between">
                     <div class="flex items-center gap-3">

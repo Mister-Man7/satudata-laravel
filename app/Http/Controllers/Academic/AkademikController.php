@@ -1,10 +1,11 @@
 <?php
 
-namespace App\Http\Controllers;
+namespace App\Http\Controllers\Academic;
 
+use App\Http\Controllers\Controller;
 use App\Models\Mahasiswa;
-use App\Services\SiakangLulusanService;
-use App\Services\SiakangMahasiswaAktifService;
+use App\Services\Integrations\SiakangLulusanService;
+use App\Services\Integrations\SiakangMahasiswaAktifService;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
 
@@ -245,7 +246,7 @@ class AkademikController extends Controller
         $prodiLulusTerbanyakS1 = $prodiS1Lulus->sortByDesc('jumlah_mahasiswa_lulus')->first() 
             ?? ['nama_prodi' => '-', 'jumlah_mahasiswa_lulus' => 0];
 
-        return view('akademik', [
+        return view('Academic.akademik', [
             'title' => 'Akademik',
             'datas' => $datas,
             'fakultas' => $fakultas,
@@ -270,7 +271,7 @@ class AkademikController extends Controller
 
     public function mahasiswaLulus(Request $request): View
     {
-        return view('mahasiswa-lulus', [
+        return view('Academic.mahasiswa-lulus', [
             'title' => 'Mahasiswa Lulus',
         ]);
     }

@@ -2,7 +2,7 @@
 
 namespace App\Livewire;
 
-use App\Services\SiakangLulusanService;
+use App\Services\Integrations\SiakangLulusanService;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator as LengthAwarePaginatorContract;
 use Illuminate\Contracts\View\View;
 use Illuminate\Pagination\LengthAwarePaginator;

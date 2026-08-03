@@ -1,8 +1,9 @@
 <?php
 
-namespace App\Http\Controllers;
+namespace App\Http\Controllers\Assets;
 
-use App\Services\SimantapService;
+use App\Http\Controllers\Controller;
+use App\Services\Integrations\SimantapService;
 use Illuminate\Http\Request;
 
 class AsetController extends Controller
@@ -32,7 +33,7 @@ class AsetController extends Controller
             ];
         });
 
-        return view('aset', compact('datas'), [
+        return view('Assets.aset', compact('datas'), [
             'title' => 'Aset',
             'level' => 'kampus'
         ]);
@@ -52,7 +53,7 @@ class AsetController extends Controller
     {
         $response = $this->apiService->makeRequest('GET', "kampus/{$satkerId}");
 
-        return view('aset', [
+        return view('Assets.aset', [
             'datas' => $response['data'] ?? [],
             'title' => 'Kampus by Satker',
             'level' => 'kampus',
@@ -64,7 +65,7 @@ class AsetController extends Controller
         $params = $request->only(['per_page']);
         $response = $this->apiService->makeRequest('GET', 'gedung', $params);
 
-        return view('aset', [
+        return view('Assets.aset', [
             'datas' => $response['data'] ?? [],
             'title' => 'Semua Gedung',
             'level' => 'gedung'
@@ -110,7 +111,7 @@ class AsetController extends Controller
             ];
         });
 
-        return view('aset', compact('datas'), [
+        return view('Assets.aset', compact('datas'), [
             'title' => 'Gedung - ' . ($dataKampus['nama_kampus'] ?? 'Daftar Gedung'),
             'level' => 'gedung',
         ]);
@@ -163,7 +164,7 @@ class AsetController extends Controller
 
         $response = $this->apiService->makeRequest('GET', 'ruangan', $params);
 
-        return view('aset', [
+        return view('Assets.aset', [
             'datas' => $response['data'] ?? [],
             'title' => 'Ruangan'
         ]);
@@ -186,7 +187,7 @@ class AsetController extends Controller
             ];
         });
 
-        return view('aset', compact('datas'), [
+        return view('Assets.aset', compact('datas'), [
             'title' => 'Ruangan',
             'level' => 'ruangan'
         ]);
@@ -206,7 +207,7 @@ class AsetController extends Controller
     {
         $response = $this->apiService->makeRequest('GET', "ruangan/by-lantai/{$lantaiId}");
 
-        return view('aset', [
+        return view('Assets.aset', [
             'datas' => $response['data'] ?? [],
             'title' => 'Ruangan by Lantai',
             'level' => 'ruangan'
@@ -247,7 +248,7 @@ class AsetController extends Controller
     {
         $response = $this->apiService->makeRequest('GET', "bmn/by-gedung/{$gedungId}");
 
-        return view('aset-bmn', [
+        return view('Assets.aset-bmn', [
             'bmnList' => collect($response['data'] ?? []),
             'title' => 'BMN Disewakan (Gedung)',
             'level' => 'bmn'
@@ -258,7 +259,7 @@ class AsetController extends Controller
     {
         $response = $this->apiService->makeRequest('GET', "bmn/by-ruangan/{$ruanganId}");
 
-        return view('aset-bmn', [
+        return view('Assets.aset-bmn', [
             'bmnList' => collect($response['data'] ?? []),
             'title' => 'BMN Disewakan (Ruangan)',
             'level' => 'bmn'
@@ -269,7 +270,7 @@ class AsetController extends Controller
     {
         $response = $this->apiService->makeRequest('GET', "bmn/by-jenis/{$jenis}");
 
-        return view('aset-bmn', [
+        return view('Assets.aset-bmn', [
             'bmnList' => collect($response['data'] ?? []),
             'title' => 'BMN Disewakan (Jenis)',
             'level' => 'bmn'
@@ -281,7 +282,7 @@ class AsetController extends Controller
         $params = $request->only(['per_page', 'status_sewa', 'id_kampus', 'id_gedung', 'id_ruangan', 'id_jenis_barang', 'kondisi', 'search', 'all']);
         $response = $this->apiService->makeRequest('GET', 'bmn-all', $params);
 
-        return view('aset-bmn', [
+        return view('Assets.aset-bmn', [
             'title' => 'Daftar Semua BMN',
             'level' => 'bmn',
             'bmnList' => collect($response['data']['data'] ?? $response['data'] ?? [])
@@ -302,7 +303,7 @@ class AsetController extends Controller
         $response = $this->apiService->makeRequest('GET', "bmn-all/by-ruangan/{$ruanganId}", $params);
         $bmnList = $response['data']['data'] ?? $response['data'] ?? [];
 
-        return view('aset-bmn', [
+        return view('Assets.aset-bmn', [
             'title' => 'Daftar Inventaris Ruangan',
             'level' => 'bmn',
             'bmnList' => collect($bmnList)
@@ -313,21 +314,21 @@ class AsetController extends Controller
     {
         $params = $request->only(['per_page', 'status_sewa', 'kondisi', 'all']);
         $response = $this->apiService->makeRequest('GET', "bmn-all/by-kampus/{$kampusId}", $params);
-        return view('aset-bmn', ['bmnList' => collect($response['data']['data'] ?? $response['data'] ?? []), 'title' => 'BMN by Kampus', 'level' => 'bmn']);
+        return view('Assets.aset-bmn', ['bmnList' => collect($response['data']['data'] ?? $response['data'] ?? []), 'title' => 'BMN by Kampus', 'level' => 'bmn']);
     }
 
     public function bmnAllByGedung($gedungId, Request $request)
     {
         $params = $request->only(['per_page', 'status_sewa', 'kondisi', 'all']);
         $response = $this->apiService->makeRequest('GET', "bmn-all/by-gedung/{$gedungId}", $params);
-        return view('aset-bmn', ['bmnList' => collect($response['data']['data'] ?? $response['data'] ?? []), 'title' => 'BMN by Gedung', 'level' => 'bmn']);
+        return view('Assets.aset-bmn', ['bmnList' => collect($response['data']['data'] ?? $response['data'] ?? []), 'title' => 'BMN by Gedung', 'level' => 'bmn']);
     }
 
     public function bmnAllByJenisBarang($jenisBarangId, Request $request)
     {
         $params = $request->only(['per_page', 'status_sewa', 'kondisi', 'all']);
         $response = $this->apiService->makeRequest('GET', "bmn-all/by-jenis-barang/{$jenisBarangId}", $params);
-        return view('aset-bmn', ['bmnList' => collect($response['data']['data'] ?? $response['data'] ?? []), 'title' => 'BMN by Jenis Barang', 'level' => 'bmn']);
+        return view('Assets.aset-bmn', ['bmnList' => collect($response['data']['data'] ?? $response['data'] ?? []), 'title' => 'BMN by Jenis Barang', 'level' => 'bmn']);
     }
 
     public function jenisBarang(Request $request)

@@ -1,8 +1,9 @@
 <?php
 
-namespace App\Http\Controllers;
+namespace App\Http\Controllers\HR;
 
-use App\Services\SimpegPegawaiService;
+use App\Http\Controllers\Controller;
+use App\Services\Integrations\SimpegPegawaiService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
@@ -23,92 +24,59 @@ class PegawaiController extends Controller
 
     public function index(Request $request): View
     {
-        $statusPegawai = [
-            $this->statistikPegawai(
-                title: 'Aktif',
-                hasilApi: $this->pegawaiService->getData($this->parameterStatusPegawai(1)),
-            ),
-            $this->statistikPegawai(
-                title: 'Pensiun',
-                hasilApi: $this->pegawaiService->getData($this->parameterStatusPegawai(2)),
-            ),
-            $this->statistikPegawai(
-                title: 'Meninggal',
-                hasilApi: $this->pegawaiService->getData($this->parameterStatusPegawai(3)),
-            ),
-            $this->statistikPegawai(
-                title: 'Mutasi/Resign',
-                hasilApi: $this->pegawaiService->getData($this->parameterStatusPegawai(4)),
-            ),
-            $this->statistikPegawai(
-                title: 'Alih Status',
-                hasilApi: $this->pegawaiService->getData($this->parameterStatusPegawai(5)),
-            ),
-            $this->statistikPegawai(
-                title: 'Cuti',
-                hasilApi: $this->pegawaiService->getData($this->parameterStatusPegawai(6)),
-            ),
-            $this->statistikPegawai(
-                title: 'Tugas Belajar',
-                hasilApi: $this->pegawaiService->getData($this->parameterStatusPegawai(7)),
-            ),
-            $this->statistikPegawai(
-                title: 'Penugasan',
-                hasilApi: $this->pegawaiService->getData($this->parameterStatusPegawai(19)),
-            ),
-            $this->statistikPegawai(
-                title: 'Tugas Belajar Mandiri',
-                hasilApi: $this->pegawaiService->getData($this->parameterStatusPegawai(20)),
-            ),
-        ];
-        $datas = [
-            $this->statistikStatusKerja(
-                title: 'CPNS',
-                hasilApi: $this->pegawaiService->getData($this->parameterStatusKerja(8)),
-            ),
-            $this->statistikStatusKerja(
-                title: 'PNS',
-                hasilApi: $this->pegawaiService->getData($this->parameterStatusKerja(1)),
-            ),
-            $this->statistikStatusKerja(
-                title: 'BLU',
-                hasilApi: $this->pegawaiService->getData($this->parameterStatusKerja(2)),
-            ),
-            $this->statistikStatusKerja(
-                title: 'Honorer',
-                hasilApi: $this->pegawaiService->getData($this->parameterStatusKerja(3)),
-            ),
-            $this->statistikStatusKerja(
-                title: 'Outsourcing',
-                hasilApi: $this->pegawaiService->getData($this->parameterStatusKerja(4)),
-            ),
-            $this->statistikStatusKerja(
-                title: 'PKWT',
-                hasilApi: $this->pegawaiService->getData($this->parameterStatusKerja(5)),
-            ),
-            $this->statistikStatusKerja(
-                title: 'PPPK',
-                hasilApi: $this->pegawaiService->getData($this->parameterStatusKerja(7)),
-            ),
-            $this->statistikStatusKerja(
-                title: 'Non BLU',
-                hasilApi: $this->pegawaiService->getData($this->parameterStatusKerja(19)),
-            ),
-            $this->statistikStatusKerja(
-                title: 'PPPK Paruh Waktu',
-                hasilApi: $this->pegawaiService->getData($this->parameterStatusKerja(20)),
-            ),
-        ];
-        $levelPegawai = [
-            $this->formatCard('Tendik', $this->pegawaiService->getData(['count' => 1, 'level_pegawai' => 2])),
-            $this->formatCard('Dosen', $this->pegawaiService->getData(['count' => 1, 'level_pegawai' => 3])),
-            $this->formatCard('Dosen DT', $this->pegawaiService->getData(['count' => 1, 'level_pegawai' => 7])),
-            $this->formatCard('Dosen Luar Biasa', $this->pegawaiService->getData(['count' => 1, 'level_pegawai' => 13])),
-        ];
-        $guruBesarApi = $this->pegawaiService->getData(['count' => 1, 'jabatan' => 44]);
-        $guruBesar = ($guruBesarApi['status'] ?? false) ? (int)($guruBesarApi['total'] ?? 0) : 0;
+        $statusPegawai = $this->buildStatusCards();
+        $datas = $this->buildWorkStatusCards();
+        $levelPegawai = $this->buildLevelCards();
+        $guruBesar = $this->getQuickCount(['jabatan' => 44]);
 
-        return view('pegawai', compact('statusPegawai', 'datas', 'levelPegawai', 'guruBesar'));
+        return view('HR.pegawai', compact('statusPegawai', 'datas', 'levelPegawai', 'guruBesar'));
+    }
+
+    private function buildStatusCards(): array
+    {
+        $results = $this->pegawaiService->getData($this->parameterStatusPegawai(1));
+
+        return [
+            $this->statistikPegawai('Aktif', $results),
+            $this->statistikPegawai('Pensiun', $this->getQuickCount(['status_pegawai' => 2])),
+            $this->statistikPegawai('Meninggal', $this->getQuickCount(['status_pegawai' => 3])),
+            $this->statistikPegawai('Mutasi/Resign', $this->getQuickCount(['status_pegawai' => 4])),
+            $this->statistikPegawai('Alih Status', $this->getQuickCount(['status_pegawai' => 5])),
+            $this->statistikPegawai('Cuti', $this->getQuickCount(['status_pegawai' => 6])),
+            $this->statistikPegawai('Tugas Belajar', $this->getQuickCount(['status_pegawai' => 7])),
+            $this->statistikPegawai('Penugasan', $this->getQuickCount(['status_pegawai' => 19])),
+            $this->statistikPegawai('Tugas Belajar Mandiri', $this->getQuickCount(['status_pegawai' => 20])),
+        ];
+    }
+
+    private function buildWorkStatusCards(): array
+    {
+        return [
+            $this->statistikStatusKerja('CPNS', $this->getQuickCount(['status_kerja' => 8])),
+            $this->statistikStatusKerja('PNS', $this->getQuickCount(['status_kerja' => 1])),
+            $this->statistikStatusKerja('BLU', $this->getQuickCount(['status_kerja' => 2])),
+            $this->statistikStatusKerja('Honorer', $this->getQuickCount(['status_kerja' => 3])),
+            $this->statistikStatusKerja('Outsourcing', $this->getQuickCount(['status_kerja' => 4])),
+            $this->statistikStatusKerja('PKWT', $this->getQuickCount(['status_kerja' => 5])),
+            $this->statistikStatusKerja('PPPK', $this->getQuickCount(['status_kerja' => 7])),
+            $this->statistikStatusKerja('Non BLU', $this->getQuickCount(['status_kerja' => 19])),
+            $this->statistikStatusKerja('PPPK Paruh Waktu', $this->getQuickCount(['status_kerja' => 20])),
+        ];
+    }
+
+    private function buildLevelCards(): array
+    {
+        return [
+            $this->formatCard('Tendik', $this->getQuickCount(['level_pegawai' => 2])),
+            $this->formatCard('Dosen', $this->getQuickCount(['level_pegawai' => 3])),
+            $this->formatCard('Dosen DT', $this->getQuickCount(['level_pegawai' => 7])),
+            $this->formatCard('Dosen Luar Biasa', $this->getQuickCount(['level_pegawai' => 13])),
+        ];
+    }
+
+    private function getQuickCount(array $parameters): array
+    {
+        return $this->pegawaiService->getData(array_merge(['count' => 1], $parameters));
     }
 
     private function statistikStatusKerja(string $title, array $hasilApi): array
