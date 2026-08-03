@@ -58,22 +58,10 @@ class SimpegPegawaiService
             return $this->noResult();
         }
 
-<<<<<<< HEAD
-        // Handle two endpoint formats:
-        // 1. New /employee endpoint: returns {status, total, message} directly
-        // 2. Old /pegawai endpoint: returns {data: [], status, message}
-        if (isset($isiResponse['total']) && is_numeric($isiResponse['total'])) {
-            // New endpoint format - /employee
-            $totalData = (int)$isiResponse['total'];
-            $dataPegawai = $isiResponse['data'] ?? [];
-        } elseif (isset($isiResponse['data']) && is_array($isiResponse['data'])) {
-            // Old endpoint format - /pegawai
-=======
         if (isset($isiResponse['total']) && is_numeric($isiResponse['total'])) {
             $totalData = (int)$isiResponse['total'];
             $dataPegawai = $isiResponse['data'] ?? [];
         } elseif (isset($isiResponse['data']) && is_array($isiResponse['data'])) {
->>>>>>> 5407f3d (update: restructured, refactor, Iinspect unused classes)
             $dataPegawai = $isiResponse['data'];
             $totalData = count($dataPegawai);
         } else {
