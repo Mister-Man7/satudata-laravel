@@ -1,8 +1,9 @@
 <?php
 
-namespace App\Http\Controllers;
+namespace App\Http\Controllers\Integration;
 
-use App\Services\SIPPService;
+use App\Http\Controllers\Controller;
+use App\Services\Integrations\SIPPService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 

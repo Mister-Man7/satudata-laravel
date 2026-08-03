@@ -3,7 +3,7 @@
 namespace App\Console\Commands;
 
 use App\Models\Aset;
-use App\Services\AsetSyncService;
+use App\Services\Sync\AsetSyncService;
 use Illuminate\Console\Attributes\Description;
 use Illuminate\Console\Attributes\Signature;
 use Illuminate\Console\Command;

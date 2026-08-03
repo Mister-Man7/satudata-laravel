@@ -1,8 +1,9 @@
 <?php
 
-namespace App\Services;
+namespace App\Services\Sync;
 
 use App\Models\Pegawai;
+use App\Services\Integrations\SimpegPegawaiService;
 use Illuminate\Support\Facades\DB;
 
 class PegawaiSyncService

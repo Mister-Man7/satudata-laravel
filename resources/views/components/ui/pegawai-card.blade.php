@@ -22,8 +22,10 @@
             <h3 class="mt-2 text-3xl font-extrabold tracking-tight {{ $textColor }}">
                 @if ($value === null)
                     —
+                @elseif (is_numeric($value))
+                    {{ number_format((int) $value, 0, ',', '.') }}
                 @else
-                    {{ number_format($value, 0, ',', '.') }}
+                    0
                 @endif
             </h3>
         </div>

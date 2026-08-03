@@ -23,12 +23,11 @@ class Mahasiswa extends Model
         'payload',
     ];
 
-    protected function casts()
+    protected function casts(): array
     {
         return [
             'payload' => 'array',
         ];
-
     }
 
     public function prodi()

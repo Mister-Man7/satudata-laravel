@@ -5,7 +5,9 @@
 ])
 
 @php
-    $total = collect($stats)->sum('value');
+    $total = collect($stats)->sum(function ($stat) {
+        return is_numeric($stat['value'] ?? null) ? (int) $stat['value'] : 0;
+    });
 @endphp
 
 <section class="rounded-[34px] bg-white p-8 shadow-lg">
@@ -55,7 +57,7 @@
                     </div>
                     <div>
                         <div class="text-4xl font-black">
-                            {{ number_format($stat['value'] ?? 0, 0, ',', '.') }}
+                            {{ is_numeric($stat['value'] ?? null) ? number_format((int) $stat['value'], 0, ',', '.') : 0 }}
                         </div>
                         <div class="text-sm opacity-80">
                             Pegawai

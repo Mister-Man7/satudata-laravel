@@ -1,8 +1,9 @@
 <?php
 
-namespace App\Services;
+namespace App\Services\Sync;
 
 use App\Models\Mahasiswa;
+use App\Services\Integrations\SiakangMahasiswaService;
 use Illuminate\Support\Facades\DB;
 
 class MahasiswaSyncService
