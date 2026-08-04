@@ -23,6 +23,16 @@ class AsetController extends Controller
         $response = $this->apiService->makeRequest('GET', 'kampus', $params);
         $kampusList = $response['data']['data'] ?? $response['data'] ?? [];
 
+        $warning = null;
+        $statusInfo = null;
+
+        if ($response === null) {
+            $warning = 'Gagal mengambil data kampus dari server. Silakan refresh halaman.';
+        } else {
+            // Ambil info status barang untuk alert
+            $statusInfo = $this->getStatusBarangInfo();
+        }
+
         $datas = collect($kampusList)->map(function ($kampus) {
             return [
                 'id' => $kampus['id_kampus'],
@@ -33,10 +43,107 @@ class AsetController extends Controller
             ];
         });
 
-        return view('Assets.aset', compact('datas'), [
+        return view('Assets.aset', compact('datas', 'warning', 'statusInfo'), [
             'title' => 'Aset',
             'level' => 'kampus'
         ]);
+    }
+
+    /**
+     * Get status barang info untuk alert
+     */
+    protected function getStatusBarangInfo()
+    {
+        try {
+            $response = $this->apiService->makeRequest('GET', 'bmn-all', [
+                'per_page' => 1000,
+                'all' => true,
+            ]);
+
+            if ($response === null) {
+                return null;
+            }
+
+            $bmnList = $response['data']['data'] ?? $response['data'] ?? [];
+            $total = count($bmnList);
+
+            if ($total === 0) {
+                return null;
+            }
+
+            // Hitung kondisi barang
+            $kondisiCounts = collect($bmnList)->groupBy(function ($item) {
+                return $item['kondisi_text'] ?? $item['kondisi'] ?? 'Tidak Diketahui';
+            })->map->count();
+
+            $baik = $kondisiCounts->get('Baik', 0);
+            $rusakRingan = $kondisiCounts->get('Rusak Ringan', 0);
+            $rusakBerat = $kondisiCounts->get('Rusak Berat', 0);
+            $tidakDiketahui = $kondisiCounts->get('Tidak Diketahui', 0);
+
+            // Cek apakah semua baik
+            if ($kondisiCounts->count() === 1 && $kondisiCounts->has('Baik')) {
+                return [
+                    'type' => 'success',
+                    'message' => "Seluruh inventaris dalam kondisi baik ({$total} unit)",
+                    'total' => $total,
+                    'detail' => [
+                        'baik' => $baik,
+                        'rusak_ringan' => 0,
+                        'rusak_berat' => 0,
+                    ],
+                ];
+            }
+
+            // Jika ada kerusakan berat - prioritas tinggi (warning/merah)
+            if ($rusakBerat > 0) {
+                $message = "Ditemukan {$rusakBerat} unit dalam kondisi rusak berat";
+                if ($rusakRingan > 0) {
+                    $message .= " dan {$rusakRingan} unit rusak ringan";
+                }
+                $message .= " dari total {$total} unit inventaris";
+
+                return [
+                    'type' => 'error',
+                    'message' => $message,
+                    'total' => $total,
+                    'detail' => [
+                        'baik' => $baik,
+                        'rusak_ringan' => $rusakRingan,
+                        'rusak_berat' => $rusakBerat,
+                    ],
+                ];
+            }
+
+            // Jika ada kerusakan ringan saja (warning/kuning)
+            if ($rusakRingan > 0) {
+                return [
+                    'type' => 'warning',
+                    'message' => "Terdapat {$rusakRingan} unit inventaris dengan kondisi rusak ringan dari total {$total} unit",
+                    'total' => $total,
+                    'detail' => [
+                        'baik' => $baik,
+                        'rusak_ringan' => $rusakRingan,
+                        'rusak_berat' => 0,
+                    ],
+                ];
+            }
+
+            // Kondisi lainnya (info/biru)
+            return [
+                'type' => 'info',
+                'message' => "Total {$total} unit inventaris tercatat dalam sistem",
+                'total' => $total,
+                'detail' => [
+                    'baik' => $baik,
+                    'rusak_ringan' => 0,
+                    'rusak_berat' => 0,
+                ],
+            ];
+
+        } catch (\Exception $e) {
+            return null;
+        }
     }
 
     public function kampusById($id)
@@ -51,10 +158,22 @@ class AsetController extends Controller
 
     public function kampusBySatker($satkerId)
     {
-        $response = $this->apiService->makeRequest('GET', "kampus/{$satkerId}");
+        $response = $this->apiService->makeRequest('GET', "kampus/by-satker/{$satkerId}");
+
+        $kampusList = $response['data']['data'] ?? $response['data'] ?? [];
+
+        $datas = collect($kampusList)->map(function ($kampus) {
+            return [
+                'id' => $kampus['id_kampus'],
+                'title' => $kampus['nama_kampus'],
+                'count' => 'Lihat detail',
+                'icon' => 'building',
+                'updated' => $kampus['updated_at'] ?? now(),
+            ];
+        });
 
         return view('Assets.aset', [
-            'datas' => $response['data'] ?? [],
+            'datas' => $datas,
             'title' => 'Kampus by Satker',
             'level' => 'kampus',
         ]);
@@ -87,7 +206,7 @@ class AsetController extends Controller
                 'per_page' => 100,
             ]);
 
-            $gedungList = $respByKampus['data']['data'] ?? $respByKampus['data'] ?? [];
+            $gedungList = $response['data'];
         }
 
         if (empty($gedungList)) {
@@ -237,7 +356,7 @@ class AsetController extends Controller
 
     public function bmnDisewakanByKampus($kampusId)
     {
-        $response = $this->apiService->makeRequest('GET', "bmn/by-kampung/{$kampusId}");
+        $response = $this->apiService->makeRequest('GET', "bmn/by-kampus/{$kampusId}");
         return view('aset-detail', [
             'data' => $response['data'] ?? [],
             'title' => 'Detail BMN Disewakan (kampus)'
