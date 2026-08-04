@@ -38,35 +38,60 @@ class SimantapService
 
     public function makeRequest($method, $endpoint, $queryParams = [])
     {
-        $token = $this->getToken();
+        return $this->makeRequestWithRetry($method, $endpoint, $queryParams, $isRetry = false);
+    }
 
-        $response = Http::withToken($token)->acceptJson()->{$method}("{$this->baseUrl}/{$endpoint}", $queryParams);
+    protected function makeRequestWithRetry($method, $endpoint, $queryParams, $isRetry)
+    {
+        try {
+            $token = $this->getToken();
+            $response = Http::withToken($token)
+                ->timeout(30)
+                ->acceptJson()
+                ->{$method}("{$this->baseUrl}/{$endpoint}", $queryParams);
 
-        $isTokenIssue = $response->status() === 401 ||
-            ($response->status() === 500 && str_contains($response->body(), 'Server Error'));
+            // Token expired / invalid - refresh dan retry sekali
+            $isTokenIssue = $response->status() === 401 ||
+                ($response->status() === 500 && str_contains($response->body(), 'Server Error'));
 
-        if ($isTokenIssue) {
-            Cache::forget('simantap_api_token');
+            if ($isTokenIssue && !$isRetry) {
+                Cache::forget('simantap_api_token');
+                $newToken = $this->getToken();
+                $response = Http::withToken($newToken)
+                    ->timeout(30)
+                    ->acceptJson()
+                    ->{$method}("{$this->baseUrl}/{$endpoint}", $queryParams);
+            }
 
-            $newToken = $this->getToken();
-            $response = Http::withToken($newToken)->acceptJson()->{$method}("{$this->baseUrl}/{$endpoint}", $queryParams);
-        }
-        if (!$response->successful() || $response->json() === null) {
+            // Berhasil
+            if ($response->successful() && $response->json() !== null) {
+                return $response->json();
+            }
+
+            // Error tapi bukan token issue - kembalikan null supaya caller bisa handle
             $errorMsg = match ($response->status()) {
-                429 => "Server API memblokir request karena kamu terlalu cepat me-refresh (Rate Limit). Tunggu sebentar lalu coba lagi.",
-                500, 502, 503, 504 => "Server API Simantap sedang down atau terjadi kesalahan fatal di backend.",
+                429 => "Server API memblokir request karena terlalu cepat. Tunggu sebentar lalu coba lagi.",
+                500, 502, 503, 504 => "Server API Simantap sedang down atau terjadi kesalahan.",
                 404 => "Endpoint API tidak ditemukan.",
-                default => "Terjadi masalah tidak dikenal dengan API."
+                522 => "Koneksi ke server API timeout. Silakan refresh halaman.",
+                default => "Terjadi masalah dengan API (status: {$response->status()})."
             };
 
-            dd([
-                'errMessage' => $errorMsg,
+            \Log::warning('Simantap API error', [
+                'endpoint' => $endpoint,
                 'status' => $response->status(),
-                'url' => "{$this->baseUrl}/{$endpoint}",
-                'response' => $response->body()
+                'message' => $errorMsg,
             ]);
-        }
 
-        return $response->json();
+            return null;
+
+        } catch (\Exception $e) {
+            \Log::warning('Simantap API exception', [
+                'endpoint' => $endpoint,
+                'message' => $e->getMessage(),
+            ]);
+
+            return null;
+        }
     }
 }

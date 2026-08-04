@@ -33,6 +33,7 @@
 
     <x-tirta-agent-chat></x-tirta-agent-chat>
 
+    @stack('scripts')
 </body>
 
 </html>

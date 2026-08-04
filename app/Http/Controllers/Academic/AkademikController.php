@@ -228,14 +228,33 @@ class AkademikController extends Controller
             return (int)($item['total'] ?? 0) + (int)($item['total_lulus'] ?? 0);
         });
 
-        $prodiS1Aktif = collect($prodiAktifList)->filter(function ($item) {
-            $jenjang = strtolower(trim($item['jenjang'] ?? ''));
-            return in_array($jenjang, ['s1', 'sarjana', 'strata 1', 'sarjana (s1)']);
+        // Deteksi jenjang S1 secara dinamis dari data API (bukan hardcode)
+        $polaJenjangS1 = '/^((s[\s\-]?1)|(strata[\s\-]?1)|(sarjana))/iu';
+
+        $jenjangS1Aktif = collect($prodiAktifList)
+            ->pluck('jenjang')
+            ->filter()
+            ->map(fn($j) => strtolower(trim($j)))
+            ->unique()
+            ->filter(fn($j) => (bool) preg_match($polaJenjangS1, $j))
+            ->values()
+            ->all();
+
+        $jenjangS1Lulus = collect($prodiLulusList)
+            ->pluck('jenjang')
+            ->filter()
+            ->map(fn($j) => strtolower(trim($j)))
+            ->unique()
+            ->filter(fn($j) => (bool) preg_match($polaJenjangS1, $j))
+            ->values()
+            ->all();
+
+        $prodiS1Aktif = collect($prodiAktifList)->filter(function ($item) use ($jenjangS1Aktif) {
+            return in_array(strtolower(trim($item['jenjang'] ?? '')), $jenjangS1Aktif);
         });
 
-        $prodiS1Lulus = collect($prodiLulusList)->filter(function ($item) {
-            $jenjang = strtolower(trim($item['jenjang'] ?? ''));
-            return in_array($jenjang, ['s1', 'sarjana', 'strata 1', 'sarjana (s1)']);
+        $prodiS1Lulus = collect($prodiLulusList)->filter(function ($item) use ($jenjangS1Lulus) {
+            return in_array(strtolower(trim($item['jenjang'] ?? '')), $jenjangS1Lulus);
         });
 
         $prodiTerbanyakS1 = $prodiS1Aktif->sortByDesc('jumlah_mahasiswa_aktif')->first() 
