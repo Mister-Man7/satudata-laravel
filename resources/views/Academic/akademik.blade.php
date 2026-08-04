@@ -28,12 +28,9 @@
     </section>
 
     <section class="mx-auto max-w-screen-2xl px-4 py-8 sm:px-6 lg:px-8">
-
         <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
-
             <div class="lg:col-span-9 bg-white rounded-2xl border border-gray-100 shadow-sm p-6 sm:p-8 flex flex-col"
                 data-fakultas-root data-payload="{{ json_encode($fakultas) }}">
-
                 <div class="flex justify-between items-start mb-6">
                     <div>
                         <h2 class="text-lg font-bold text-gray-900">Persebaran Mahasiswa Berdasarkan Fakultas</h2>
@@ -44,19 +41,16 @@
                         <i class="fa-solid fa-bars text-lg"></i>
                     </div>
                 </div>
-
                 <div class="relative w-full flex-1 min-h-[300px]">
                     <canvas data-fakultas-chart></canvas>
                 </div>
             </div>
-
             <div
                 class="lg:col-span-3 bg-white rounded-2xl border border-gray-100 shadow-sm p-6 sm:p-8 flex flex-col gap-8">
                 <h4 class="flex items-center gap-2 text-base font-medium text-gray-900 mb-1">
                     <i class="fa-solid fa-medal text-lg text-yellow-600"></i>
                     <span>Top Rank Sarjana (S1)</span>
                 </h4>
-
                 <div>
                     <h4 class="text-sm font-medium text-gray-500 mb-1">Mahasiswa Terbanyak</h4>
                     <p class="text-4xl font-bold text-gray-900 tracking-tight">
@@ -69,9 +63,7 @@
                         </span>
                     </p>
                 </div>
-
                 <div class="border-t border-gray-100"></div>
-
                 <div>
                     <h4 class="text-sm font-medium text-gray-500 mb-1">Mahasiswa Paling Sedikit</h4>
                     <p class="text-4xl font-bold text-gray-900 tracking-tight">
@@ -84,9 +76,7 @@
                         </span>
                     </p>
                 </div>
-
                 <div class="border-t border-gray-100"></div>
-
                 <div>
                     <h4 class="text-sm font-medium text-gray-500 mb-1">Lulusan Terbanyak</h4>
                     <p class="text-4xl font-bold text-gray-900 tracking-tight">
@@ -125,34 +115,67 @@
             </div>
 
             <div class="mt-3 p-5 col-12">
-                <div class="alert alert-info" role="alert">
-                    <i class="mdi mdi-information-outline mr-1 text-info"></i>
-                    Seleksi Nasional dihitung dari SNBP, SNBT, SNMPTN, dan SBMPTN
+            </div>
+            <div class="alert alert-info" role="alert">
+                <i class="mdi mdi-information-outline mr-1 text-info"></i>
+                Seleksi Nasional dihitung dari SNBP, SNBT, SNMPTN, dan SBMPTN
+            </div>
+            <div class="alert alert-info" role="alert">
+                <i class="mdi mdi-information-outline mr-1 text-info"></i>
+                Seleksi Mandiri dihitung dari SMPTN, SMBT, SMMPTN-BARAT, Ujian Mandiri, Seleksi
+                Mandiri, dan Ujian Mandiri Bersama
+            </div>
+            <div class="alert alert-info" role="alert">
+                <i class="mdi mdi-information-outline mr-1 text-info"></i>
+                Lainnya
+            </div>
+        </div>
+    </section>
+
+    <section class="mx-auto max-w-screen-2xl px-4 py-4 sm:px-6 lg:px-8">
+        <div class="mb-4 flex items-center justify-between">
+            <h1 class="font-bold mb-4 text-2xl text-gray-800">
+                Dosen
+            </h1>
+            <span
+                class="inline-flex items-center gap-1.5 rounded-full bg-indigo-50 px-4 py-1.5 text-sm font-semibold text-indigo-700">
+                <i class="fa-solid fa-chalkboard-user"></i>
+                {{ number_format($totalDosen ?? 0, 0, ',', '.') }} Dosen
+            </span>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+            <div class="lg:col-span-7 bg-white rounded-2xl border border-gray-100 shadow-sm p-6 sm:p-8"
+                data-dosen-fakultas-root data-payload="{{ json_encode($dosenByFakultas ?? []) }}">
+                <div class="flex justify-between items-start mb-6">
+                    <div>
+                        <h2 class="text-lg font-bold text-gray-900">Persebaran Dosen Berdasarkan Fakultas</h2>
+                        <p class="text-xs text-gray-400 mt-0.5">Sumber: SIMPEG</p>
+                    </div>
+                    <div class="text-gray-400 hover:text-gray-600 cursor-pointer">
+                        <i class="fa-solid fa-bars text-lg"></i>
+                    </div>
                 </div>
-                <div class="alert alert-info" role="alert">
-                    <i class="mdi mdi-information-outline mr-1 text-info"></i>
-                    Seleksi Mandiri dihitung dari SMPTN, SMBT, SMMPTN-BARAT, Ujian Mandiri, Seleksi
-                    Mandiri, dan Ujian Mandiri Bersama
-                </div>
-                <div class="alert alert-info" role="alert">
-                    <i class="mdi mdi-information-outline mr-1 text-info"></i>
-                    Lainnya
+                <div class="relative w-full h-[350px]">
+                    <canvas data-dosen-fakultas-chart></canvas>
                 </div>
             </div>
 
-            <div class="flex items-start gap-2">
-                <i class="fa-solid fa-circle-info mt-0.5 text-lg text-black"></i>
-                <div>
-                    <h4 class="font-bold text-blue-950">Keterangan:</h4>
-                    <p class="mt-1 text-sm leading-relaxed text-blue-800">
-                        <span class="block">- Seleksi Nasional = SNBP, SNBT, SNMPTN, dan SBMPTN </span>
-                        <span class="block">- Seleksi Mandiri = SMPTN, SMBT, SMMPTN-BARAT, Ujian Mandiri, Seleksi
-                            Mandiri, dan Ujian Mandiri Bersama</span>
-                        <span class="block">- Lainnya</span>
-                    </p>
+            <div class="lg:col-span-5 bg-white rounded-2xl border border-gray-100 shadow-sm p-6 sm:p-8"
+                data-dosen-status-root data-payload="{{ json_encode($dosenByStatus ?? []) }}">
+                <div class="flex justify-between items-start mb-6">
+                    <div>
+                        <h2 class="text-lg font-bold text-gray-900">Dosen Berdasarkan Status Kepegawaian</h2>
+                        <p class="text-xs text-gray-400 mt-0.5">Sumber: SIMPEG</p>
+                    </div>
+                    <div class="text-gray-400 hover:text-gray-600 cursor-pointer">
+                        <i class="fa-solid fa-bars text-lg"></i>
+                    </div>
+                </div>
+                <div class="relative w-full h-[350px]">
+                    <canvas data-dosen-status-chart></canvas>
                 </div>
             </div>
-        </div>
         </div>
     </section>
 </x-layout>

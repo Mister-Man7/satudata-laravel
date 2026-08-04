@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Mahasiswa;
 use App\Services\Integrations\SiakangLulusanService;
 use App\Services\Integrations\SiakangMahasiswaAktifService;
+use App\Services\Integrations\SimpegPegawaiService;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
 
@@ -14,6 +15,7 @@ class AkademikController extends Controller
     public function __construct(
         public SiakangMahasiswaAktifService $aktifService,
         public SiakangLulusanService        $lulusanService,
+        public SimpegPegawaiService         $pegawaiService,
     )
     {
     }
@@ -246,6 +248,13 @@ class AkademikController extends Controller
         $prodiLulusTerbanyakS1 = $prodiS1Lulus->sortByDesc('jumlah_mahasiswa_lulus')->first() 
             ?? ['nama_prodi' => '-', 'jumlah_mahasiswa_lulus' => 0];
 
+        $dosenResponse = $this->pegawaiService->getDataDosen();
+        $dataDosen = ($dosenResponse['status'] ?? false) ? ($dosenResponse['data'] ?? []) : [];
+
+        $dosenByFakultas = $this->agregasiDosenByFakultas($dataDosen);
+        $dosenByStatus = $this->agregasiDosenByStatus($dataDosen);
+        $totalDosen = count($dataDosen);
+
         return view('Academic.akademik', [
             'title' => 'Akademik',
             'datas' => $datas,
@@ -266,7 +275,45 @@ class AkademikController extends Controller
             
             'jumlahPeminat' => $peminatPerJalur,
             'chartPeminat' => $chartPeminat,
+            'dosenByFakultas' => $dosenByFakultas,
+            'dosenByStatus' => $dosenByStatus,
+            'totalDosen' => $totalDosen,
         ]);
+    }
+
+    private function agregasiDosenByFakultas(array $dataDosen): array
+    {
+        $unitDikecualikan = ['Biro Perencanaan Keuangan dan Umum'];
+
+        $kelompok = collect($dataDosen)
+            ->reject(function ($item) use ($unitDikecualikan) {
+                $unitKerja = trim((string)($item['unitKerja'] ?? ''));
+                return in_array($unitKerja, $unitDikecualikan, true);
+            })
+            ->groupBy(function ($item) {
+                return trim((string)($item['unitKerja'] ?? 'Tidak Teridentifikasi'));
+            });
+
+        return $kelompok->map(function ($items, $namaFakultas) {
+            return [
+                'name' => $namaFakultas === '' ? 'Tidak Teridentifikasi' : $namaFakultas,
+                'total' => $items->count(),
+            ];
+        })->sortByDesc('total')->values()->all();
+    }
+
+    private function agregasiDosenByStatus(array $dataDosen): array
+    {
+        $kelompok = collect($dataDosen)->groupBy(function ($item) {
+            return trim((string)($item['statusKerja'] ?? ''));
+        });
+
+        return $kelompok->map(function ($items, $statusKerja) {
+            return [
+                'label' => $statusKerja === '' ? 'Tidak Diketahui' : $statusKerja,
+                'total' => $items->count(),
+            ];
+        })->sortByDesc('total')->values()->all();
     }
 
     public function mahasiswaLulus(Request $request): View
