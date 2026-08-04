@@ -29,7 +29,37 @@ class PegawaiController extends Controller
         $levelPegawai = $this->buildLevelCards();
         $guruBesar = $this->getQuickCount(['jabatan' => 44]);
 
-        return view('HR.pegawai', compact('statusPegawai', 'datas', 'levelPegawai', 'guruBesar'));
+        // Siapkan data untuk 3 chart
+        $chartStatusPegawai = $this->buildChartData($statusPegawai);
+        $chartStatusKerja = $this->buildChartData($datas);
+        $chartLevelPegawai = $this->buildChartData($levelPegawai);
+
+        return view('HR.pegawai', compact('statusPegawai', 'datas', 'levelPegawai', 'guruBesar', 'chartStatusPegawai', 'chartStatusKerja', 'chartLevelPegawai'));
+    }
+
+    /**
+     * Build data untuk chart dari array cards
+     */
+    private function buildChartData(array $cards): array
+    {
+        $labels = [];
+        $data = [];
+        $total = 0;
+
+        foreach ($cards as $card) {
+            $label = $card['label'] ?? '-';
+            $value = (int) ($card['value'] ?? 0);
+
+            $labels[] = $label;
+            $data[] = $value;
+            $total += $value;
+        }
+
+        return [
+            'labels' => $labels,
+            'data' => $data,
+            'total' => $total,
+        ];
     }
 
     private function buildStatusCards(): array
@@ -191,8 +221,8 @@ class PegawaiController extends Controller
                 'bg' => 'bg-purple-600',
                 'icon' => 'fa-solid fa-right-left',
                 'text' => 'text-white',
-                'iconBg' => $style['iconBg'] ?? 'bg-white/15',
-                'iconColor' => $style['iconColor'] ?? 'text-white',
+                'iconBg' => 'bg-white/15',
+                'iconColor' => 'text-white',
             ],
 
             'Alih Status' => [
@@ -200,8 +230,8 @@ class PegawaiController extends Controller
                 'bg' => 'bg-amber-400',
                 'icon' => 'fa-solid fa-layer-group',
                 'text' => 'text-black',
-                'iconBg' => $style['iconBg'] ?? 'bg-white/15',
-                'iconColor' => $style['iconColor'] ?? 'text-white',
+                'iconBg' => 'bg-white/15',
+                'iconColor' => 'text-white',
             ],
 
             'Cuti' => [
@@ -219,8 +249,8 @@ class PegawaiController extends Controller
                 'bg' => 'bg-sky-500',
                 'icon' => 'fa-solid fa-graduation-cap',
                 'text' => 'text-white',
-                'iconBg' => $style['iconBg'] ?? 'bg-white/15',
-                'iconColor' => $style['iconColor'] ?? 'text-white',
+                'iconBg' => 'bg-white/15',
+                'iconColor' => 'text-white',
             ],
 
             'Penugasan' => [
@@ -228,8 +258,8 @@ class PegawaiController extends Controller
                 'bg' => 'bg-pink-500',
                 'icon' => 'fa-solid fa-briefcase',
                 'text' => 'text-white',
-                'iconBg' => $style['iconBg'] ?? 'bg-white/15',
-                'iconColor' => $style['iconColor'] ?? 'text-white',
+                'iconBg' => 'bg-white/15',
+                'iconColor' => 'text-white',
             ],
 
             'Tugas Belajar Mandiri' => [
@@ -237,8 +267,8 @@ class PegawaiController extends Controller
                 'bg' => 'bg-indigo-600',
                 'icon' => 'fa-solid fa-book-open-reader',
                 'text' => 'text-white',
-                'iconBg' => $style['iconBg'] ?? 'bg-white/15',
-                'iconColor' => $style['iconColor'] ?? 'text-white',
+                'iconBg' => 'bg-white/15',
+                'iconColor' => 'text-white',
             ],
         ];
 
