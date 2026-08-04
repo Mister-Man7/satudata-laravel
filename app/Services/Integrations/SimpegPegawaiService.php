@@ -43,7 +43,7 @@ class SimpegPegawaiService
                     'User-Agent' => 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36',
                     $apiKeyHeader => $apiKeyValue,
                 ])
-                ->get($baseUrl, $parameter);
+                ->get(rtrim($baseUrl, '/') . '/employee', $parameter);
         } catch (ConnectionException) {
             return $this->noResult();
         }
@@ -99,5 +99,77 @@ class SimpegPegawaiService
             'halaman_sekarang' => 1,
             'halaman_terakhir' => 1,
         ];
+    }
+
+    public function getDataDosen(string $endpoint = 'pegawai', array $parameter = []): array
+    {
+        $baseUrl = config('services.simpeg.base_url');
+        $apiKeyHeader = config('services.simpeg.key');
+        $apiKeyValue = config('services.simpeg.value');
+
+        if (!is_string($baseUrl) || filter_var($baseUrl, FILTER_VALIDATE_URL) === false) {
+            return $this->noResult();
+        }
+
+        if (!is_string($apiKeyHeader) || $apiKeyHeader === '' || !is_string($apiKeyValue) || $apiKeyValue === '') {
+            return $this->noResult();
+        }
+
+        $url = rtrim($baseUrl, '/') . '/' . ltrim($endpoint, '/');
+        
+        $cacheKey = 'simpeg_dosen_' . md5($url . json_encode($parameter));
+
+        if (Cache::has($cacheKey)) {
+            return Cache::get($cacheKey);
+        }
+
+        try {
+            $response = Http::connectTimeout(3)
+                ->timeout(8)
+                ->acceptJson()
+                ->withHeaders([
+                    'Accept-Language' => 'id-ID,id;q=0.9,en-US;q=0.8',
+                    'Referer' => rtrim($baseUrl, '/') . '/',
+                    'User-Agent' => 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36',
+                    $apiKeyHeader => $apiKeyValue,
+                ])
+                ->get($url, $parameter);
+
+        } catch (ConnectionException) {
+            return $this->noResult();
+        }
+
+        if (!$response->successful()) {
+            return $this->noResult();
+        }
+
+        $isiResponse = $response->json();
+
+        if (!is_array($isiResponse) || !isset($isiResponse['data'])) {
+            return $this->noResult();
+        }
+
+        $dataPegawai = $isiResponse['data'];
+
+        $dataDosen = array_filter($dataPegawai, function ($item) {
+            return isset($item['levelPegawai']) && stripos($item['levelPegawai'], 'Dosen') !== false;
+        });
+
+        $dataDosen = array_values($dataDosen);
+
+        $result = [
+            'status' => true,
+            'message' => 'Berhasil mengambil data dosen',
+            'data' => $dataDosen,
+            'total' => count($dataDosen),
+            'halaman_sekarang' => 1,
+            'halaman_terakhir' => 1,
+        ];
+
+        Cache::put($cacheKey, $result, now()->addMinutes(5));
+
+        return $result;
+
+
     }
 }

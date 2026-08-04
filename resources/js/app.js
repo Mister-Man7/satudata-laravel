@@ -529,6 +529,216 @@ window.initSebaranFakultasChart = function (ChartLibrary) {
     });
 };
 
+// chart Dosen by Fakultas
+window.initDosenFakultasChart = function (ChartLibrary) {
+    const root = document.querySelector('[data-dosen-fakultas-root]');
+    if (!root) return;
+
+    const rawData = JSON.parse(root.getAttribute('data-payload'));
+    const canvas = root.querySelector('[data-dosen-fakultas-chart]');
+    const ctx = canvas?.getContext('2d');
+
+    if (!ctx || !rawData || !Array.isArray(rawData)) return;
+
+    const fullNames = rawData.map(item => item.name || '-');
+    const dataTotal = rawData.map(item => parseInt(item.total || 0, 10));
+
+    const shortLabels = fullNames.map(name => {
+        if (name.includes('Teknik')) return 'FT';
+        if (name.includes('Hukum')) return 'FH';
+        if (name.includes('Pertanian')) return 'FP';
+        if (name.includes('Kedokteran')) return 'FKIK';
+        if (name.includes('Ekonomi')) return 'FEB';
+        if (name.includes('Sosial')) return 'FISIP';
+        if (name.includes('Keguruan')) return 'FKIP';
+        if (name.includes('Pascasarjana')) return 'Pascasarjana';
+
+        const words = name.replace(/Fakultas | dan /gi, '').split(' ');
+        return words.length > 1
+            ? (words[0][0] + words[1][0]).toUpperCase()
+            : name.slice(0, 3).toUpperCase();
+    });
+
+    const dosenFakultasNumbersPlugin = {
+        id: 'dosenFakultasNumbers',
+        afterDatasetsDraw(chart) {
+            const {ctx: c, data} = chart;
+            c.save();
+            c.font = '700 11px sans-serif';
+            c.fillStyle = '#1f2937';
+            c.textBaseline = 'bottom';
+
+            chart.data.datasets.forEach((dataset, dsIdx) => {
+                const meta = chart.getDatasetMeta(dsIdx);
+                if (meta.hidden) return;
+
+                meta.data.forEach((bar, index) => {
+                    const value = dataset.data[index];
+                    if (!value || value === 0) return;
+
+                    c.textAlign = 'center';
+                    c.fillText(value.toLocaleString('id-ID'), bar.x, bar.y - 4);
+                });
+            });
+
+            c.restore();
+        }
+    };
+
+    new ChartLibrary(ctx, {
+        type: 'bar',
+        plugins: [dosenFakultasNumbersPlugin],
+        data: {
+            labels: shortLabels,
+            datasets: [
+                {
+                    label: 'Dosen',
+                    data: dataTotal,
+                    backgroundColor: '#4F46E5',
+                    borderRadius: 4,
+                    maxBarThickness: 56,
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            layout: {padding: {top: 25}},
+            animation: {duration: 800, easing: 'easeOutQuart'},
+            interaction: {mode: 'index', intersect: false},
+            plugins: {
+                legend: {display: false},
+                tooltip: {
+                    backgroundColor: 'rgba(15, 23, 42, 0.92)',
+                    titleFont: {size: 13, weight: 'bold'},
+                    bodyFont: {size: 13},
+                    padding: 12,
+                    cornerRadius: 8,
+                    callbacks: {
+                        title: (tooltipItems) => fullNames[tooltipItems[0].dataIndex],
+                        label: (context) => `  Dosen: ${context.parsed.y.toLocaleString('id-ID')}`
+                    }
+                }
+            },
+            scales: {
+                x: {
+                    grid: {display: false, drawBorder: false},
+                    ticks: {
+                        font: {size: 12, weight: '600'},
+                        color: '#475569',
+                    }
+                },
+                y: {
+                    beginAtZero: true,
+                    grid: {color: '#f1f5f9', drawBorder: false},
+                    ticks: {
+                        font: {size: 11},
+                        color: '#64748b',
+                        callback: (val) => val.toLocaleString('id-ID')
+                    }
+                }
+            }
+        }
+    });
+};
+
+// chart Dosen by Status Kepegawaian
+window.initDosenStatusChart = function (ChartLibrary) {
+    const root = document.querySelector('[data-dosen-status-root]');
+    if (!root) return;
+
+    const rawData = JSON.parse(root.getAttribute('data-payload'));
+    const canvas = root.querySelector('[data-dosen-status-chart]');
+    const ctx = canvas?.getContext('2d');
+
+    if (!ctx || !rawData || !Array.isArray(rawData)) return;
+
+    const labels = rawData.map(item => item.label || '-');
+    const dataTotal = rawData.map(item => parseInt(item.total || 0, 10));
+
+    const palette = [
+        '#4F46E5', '#0EA5E9', '#10B981', '#F59E0B',
+        '#EF4444', '#8B5CF6', '#EC4899', '#14B8A6',
+        '#F97316', '#6366F1', '#64748B'
+    ];
+
+    const dosenStatusNumbersPlugin = {
+        id: 'dosenStatusNumbers',
+        afterDatasetsDraw(chart) {
+            const {ctx: c} = chart;
+            c.save();
+            c.font = '700 11px sans-serif';
+            c.fillStyle = '#1f2937';
+            c.textBaseline = 'middle';
+
+            chart.data.datasets.forEach((dataset, dsIdx) => {
+                const meta = chart.getDatasetMeta(dsIdx);
+                if (meta.hidden) return;
+
+                meta.data.forEach((bar, index) => {
+                    const value = dataset.data[index];
+                    if (!value || value === 0) return;
+
+                    const height = Math.abs(bar.base - bar.y);
+                    if (height > 18) {
+                        c.textAlign = 'center';
+                        c.fillText(value.toLocaleString('id-ID'), bar.x, bar.y + (height / 2));
+                    }
+                });
+            });
+
+            c.restore();
+        }
+    };
+
+    new ChartLibrary(ctx, {
+        type: 'doughnut',
+        plugins: [dosenStatusNumbersPlugin],
+        data: {
+            labels: labels,
+            datasets: [
+                {
+                    label: 'Dosen',
+                    data: dataTotal,
+                    backgroundColor: palette.slice(0, dataTotal.length),
+                    borderWidth: 2,
+                    borderColor: '#ffffff',
+                    hoverOffset: 8,
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            cutout: '58%',
+            animation: {duration: 800, easing: 'easeOutQuart'},
+            plugins: {
+                legend: {
+                    display: true,
+                    position: 'bottom',
+                    labels: {
+                        usePointStyle: true,
+                        boxWidth: 8,
+                        font: {size: 11, weight: '600'},
+                        color: '#475569',
+                        padding: 12
+                    }
+                },
+                tooltip: {
+                    backgroundColor: 'rgba(15, 23, 42, 0.92)',
+                    titleFont: {size: 13, weight: 'bold'},
+                    bodyFont: {size: 13},
+                    padding: 12,
+                    cornerRadius: 8,
+                    callbacks: {
+                        label: (context) => `  ${context.label}: ${context.parsed.toLocaleString('id-ID')}`
+                    }
+                }
+            }
+        }
+    });
+};
+
 // Nav mobile
 function initMobileMenu() {
     const mobileMenuButton = document.querySelector('[data-mobile-menu-button]');
@@ -824,6 +1034,13 @@ document.addEventListener('DOMContentLoaded', () => {
         window.initSebaranFakultasChart(Chart);
     }
 
+    if (typeof window.initDosenFakultasChart === 'function') {
+        window.initDosenFakultasChart(Chart);
+    }
+
+    if (typeof window.initDosenStatusChart === 'function') {
+        window.initDosenStatusChart(Chart);
+    }
 
     initMobileMenu();
     initTirtaAgentDrawer();
