@@ -50,98 +50,147 @@ class AsetController extends Controller
     }
 
     /**
+     * Normalisasi nilai kondisi dari angka atau teks
+     */
+    protected function normalizeKondisi($item)
+    {
+        // Kalau ada kondisi_text, langsung pakai
+        if (!empty($item['kondisi_text'])) {
+            return strtolower(trim($item['kondisi_text']));
+        }
+
+        // Kalau ada nama_kondisi
+        if (!empty($item['nama_kondisi'])) {
+            return strtolower(trim($item['nama_kondisi']));
+        }
+
+        // Mapping dari angka ke teks (berdasarkan view aset-bmn: 1=Baik)
+        $kondisi = $item['kondisi'] ?? null;
+        if ($kondisi !== null) {
+            $mapping = [
+                1 => 'baik',
+                2 => 'rusak ringan',
+                3 => 'rusak berat',
+            ];
+            return $mapping[(int) $kondisi] ?? 'tidak diketahui';
+        }
+
+        return 'tidak diketahui';
+    }
+
+    /**
      * Get status barang info untuk alert
+     * Menggunakan cache 1 jam untuk hindari timeout
      */
     protected function getStatusBarangInfo()
     {
         try {
-            $response = $this->apiService->makeRequest('GET', 'bmn-all', [
-                'per_page' => 1000,
-                'all' => true,
-            ]);
-
-            if ($response === null) {
-                return null;
+            // Cek cache dulu
+            $cached = \Cache::get('aset_status_summary');
+            if ($cached !== null) {
+                return $cached;
             }
 
-            $bmnList = $response['data']['data'] ?? $response['data'] ?? [];
-            $total = count($bmnList);
+            // Jika tidak ada cache, fetch semua data
+            $allBmn = [];
+            $page = 1;
+            $perPage = 100;
+            $maxPages = 50; // Max 50 halaman = 5000 item
+
+            while ($page <= $maxPages) {
+                $response = $this->apiService->makeRequest('GET', 'bmn-all', [
+                    'per_page' => $perPage,
+                    'page' => $page,
+                ]);
+
+                if ($response === null) {
+                    break;
+                }
+
+                $pageData = $response['data']['data'] ?? $response['data'] ?? [];
+
+                if (!is_array($pageData)) {
+                    $pageData = (array) $pageData;
+                }
+
+                $pageCount = count($pageData);
+
+                if ($pageCount === 0) {
+                    break;
+                }
+
+                $allBmn = array_merge($allBmn, $pageData);
+
+                if ($pageCount < $perPage) {
+                    break;
+                }
+
+                $page++;
+            }
+
+            $total = count($allBmn);
 
             if ($total === 0) {
                 return null;
             }
 
             // Hitung kondisi barang
-            $kondisiCounts = collect($bmnList)->groupBy(function ($item) {
-                return $item['kondisi_text'] ?? $item['kondisi'] ?? 'Tidak Diketahui';
-            })->map->count();
+            $baik = 0;
+            $rusakRingan = 0;
+            $rusakBerat = 0;
+            $lainnya = 0;
 
-            $baik = $kondisiCounts->get('Baik', 0);
-            $rusakRingan = $kondisiCounts->get('Rusak Ringan', 0);
-            $rusakBerat = $kondisiCounts->get('Rusak Berat', 0);
-            $tidakDiketahui = $kondisiCounts->get('Tidak Diketahui', 0);
+            foreach ($allBmn as $item) {
+                $kondisi = $this->normalizeKondisi($item);
+                match ($kondisi) {
+                    'baik' => $baik++,
+                    'rusak ringan' => $rusakRingan++,
+                    'rusak berat' => $rusakBerat++,
+                    default => $lainnya++,
+                };
+            }
 
-            // Cek apakah semua baik
-            if ($kondisiCounts->count() === 1 && $kondisiCounts->has('Baik')) {
-                return [
+            \Log::info('Status Barang Summary', compact('total', 'baik', 'rusakRingan', 'rusakBerat', 'lainnya'));
+
+            // Tentukan type dan message berdasarkan kondisi terparah
+            if ($rusakRingan === 0 && $rusakBerat === 0 && $lainnya === 0) {
+                $result = [
                     'type' => 'success',
                     'message' => "Seluruh inventaris dalam kondisi baik ({$total} unit)",
                     'total' => $total,
-                    'detail' => [
-                        'baik' => $baik,
-                        'rusak_ringan' => 0,
-                        'rusak_berat' => 0,
-                    ],
                 ];
-            }
-
-            // Jika ada kerusakan berat - prioritas tinggi (warning/merah)
-            if ($rusakBerat > 0) {
+            } elseif ($rusakBerat > 0) {
                 $message = "Ditemukan {$rusakBerat} unit dalam kondisi rusak berat";
                 if ($rusakRingan > 0) {
                     $message .= " dan {$rusakRingan} unit rusak ringan";
                 }
                 $message .= " dari total {$total} unit inventaris";
-
-                return [
+                $result = [
                     'type' => 'error',
                     'message' => $message,
                     'total' => $total,
-                    'detail' => [
-                        'baik' => $baik,
-                        'rusak_ringan' => $rusakRingan,
-                        'rusak_berat' => $rusakBerat,
-                    ],
                 ];
-            }
-
-            // Jika ada kerusakan ringan saja (warning/kuning)
-            if ($rusakRingan > 0) {
-                return [
+            } elseif ($rusakRingan > 0) {
+                $result = [
                     'type' => 'warning',
                     'message' => "Terdapat {$rusakRingan} unit inventaris dengan kondisi rusak ringan dari total {$total} unit",
                     'total' => $total,
-                    'detail' => [
-                        'baik' => $baik,
-                        'rusak_ringan' => $rusakRingan,
-                        'rusak_berat' => 0,
-                    ],
+                ];
+            } else {
+                $result = [
+                    'type' => 'info',
+                    'message' => "Total {$total} unit inventaris tercatat dalam sistem",
+                    'total' => $total,
                 ];
             }
 
-            // Kondisi lainnya (info/biru)
-            return [
-                'type' => 'info',
-                'message' => "Total {$total} unit inventaris tercatat dalam sistem",
-                'total' => $total,
-                'detail' => [
-                    'baik' => $baik,
-                    'rusak_ringan' => 0,
-                    'rusak_berat' => 0,
-                ],
-            ];
+            // Cache hasil selama 1 jam
+            \Cache::put('aset_status_summary', $result, now()->addHours(1));
+
+            return $result;
 
         } catch (\Exception $e) {
+            \Log::error('getStatusBarangInfo error', ['message' => $e->getMessage()]);
             return null;
         }
     }
