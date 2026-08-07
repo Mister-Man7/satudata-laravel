@@ -7,6 +7,7 @@ use App\Models\Mahasiswa;
 use App\Services\Integrations\SiakangLulusanService;
 use App\Services\Integrations\SiakangMahasiswaAktifService;
 use App\Services\Integrations\SimpegPegawaiService;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
 
@@ -63,26 +64,32 @@ class AkademikController extends Controller
         $detailFakultasAktif = [];
         $prodiAktifList = [];
 
-        if ((isset($responseAktif['status']) && $responseAktif['status'] === true) || 
-            (isset($responseAktif['tersedia']) && $responseAktif['tersedia'] === true)) {
-            $totalAktifSekarang = $responseAktif['total_mahasiswa'] ?? $responseAktif['total'] ?? 0;
-            $detailFakultasAktif = $responseAktif['detail_per_fakultas'] ?? $responseAktif['data'] ?? [];
-            $prodiAktifList = $responseAktif['detail_per_prodi'] ?? [];
+        if ($responseAktif->success) {
+            $dataAktif = is_array($responseAktif->data) ? $responseAktif->data : [];
+            $totalAktifSekarang = $dataAktif['total_mahasiswa_aktif'] ?? $dataAktif['total'] ?? 0;
+            $detailFakultasAktif = $dataAktif['detail_per_fakultas'] ?? [];
+            $prodiAktifList = $dataAktif['detail_per_prodi'] ?? [];
+        } else {
+            Log::warning('Gagal mengambil data mahasiswa aktif', ['message' => $responseAktif->message]);
         }
 
         $totalLulusanSekarang = 0;
         $detailFakultasLulus = [];
         $prodiLulusList = [];
 
-        if (isset($responseLulusan['tersedia']) && $responseLulusan['tersedia'] === true) {
-            $totalLulusanSekarang = $responseLulusan['total_mahasiswa_lulus'] ?? 0;
-            $detailFakultasLulus = $responseLulusan['detail_per_fakultas'] ?? [];
-            $prodiLulusList = $responseLulusan['detail_per_prodi'] ?? [];
+        if ($responseLulusan->success) {
+            $dataLulusan = is_array($responseLulusan->data) ? $responseLulusan->data : [];
+            $totalLulusanSekarang = $dataLulusan['total_mahasiswa_lulus'] ?? 0;
+            $detailFakultasLulus = $dataLulusan['detail_per_fakultas'] ?? [];
+            $prodiLulusList = $dataLulusan['detail_per_prodi'] ?? [];
+        } else {
+            Log::warning('Gagal mengambil data mahasiswa lulus', ['message' => $responseLulusan->message]);
         }
 
         $totalLulusanLalu = 0;
-        if (isset($responseLulusanLalu['tersedia']) && $responseLulusanLalu['tersedia'] === true) {
-            $totalLulusanLalu = $responseLulusanLalu['total_mahasiswa_lulus'] ?? 0;
+        if ($responseLulusanLalu->success) {
+            $dataLulusanLalu = is_array($responseLulusanLalu->data) ? $responseLulusanLalu->data : [];
+            $totalLulusanLalu = $dataLulusanLalu['total_mahasiswa_lulus'] ?? 0;
         }
 
         $totalBaruSekarang = Mahasiswa::where('angkatan', $tahunAktif)->count();
@@ -268,7 +275,7 @@ class AkademikController extends Controller
             ?? ['nama_prodi' => '-', 'jumlah_mahasiswa_lulus' => 0];
 
         $dosenResponse = $this->pegawaiService->getDataDosen();
-        $dataDosen = ($dosenResponse['status'] ?? false) ? ($dosenResponse['data'] ?? []) : [];
+        $dataDosen = $dosenResponse->success ? ($dosenResponse->data ?? []) : [];
 
         $dosenByFakultas = $this->agregasiDosenByFakultas($dataDosen);
         $dosenByStatus = $this->agregasiDosenByStatus($dataDosen);

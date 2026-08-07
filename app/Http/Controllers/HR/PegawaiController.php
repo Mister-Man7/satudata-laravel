@@ -106,7 +106,8 @@ class PegawaiController extends Controller
 
     private function getQuickCount(array $parameters): array
     {
-        return $this->pegawaiService->getData(array_merge(['count' => 1], $parameters));
+        $response = $this->pegawaiService->getData(array_merge(['count' => 1], $parameters));
+        return $response->success ? $response->data : [];
     }
 
     private function statistikStatusKerja(string $title, array $hasilApi): array
@@ -154,7 +155,15 @@ class PegawaiController extends Controller
             'jabatan' => $validated['jabatan'] ?? null,
         ], static fn(mixed $value): bool => $value !== null && $value !== '');
 
-        return response()->json($this->pegawaiService->getData($parameter));
+        $response = $this->pegawaiService->getData($parameter);
+
+        return response()->json([
+            'success' => $response->success,
+            'status' => $response->success,
+            'total' => $response->data['total'] ?? 0,
+            'data' => $response->data['data'] ?? $response->data ?? [],
+            'message' => $response->message,
+        ]);
     }
 
     private function validatedFilters(Request $request): array
@@ -301,7 +310,7 @@ class PegawaiController extends Controller
             'label' => $title,
             'value' => ($hasilApi['status'] ?? false)
                 ? (int)($hasilApi['total'] ?? 0)
-                : 0,
+                : (($hasilApi['success'] ?? false) ? (int)($hasilApi['data']['total'] ?? 0) : 0),
 
             'span' => $style['span'],
             'bg' => $style['bg'],
@@ -356,7 +365,9 @@ class PegawaiController extends Controller
 
         return [
             'label' => $title,
-            'value' => ($hasilApi['status'] ?? false) ? (int)($hasilApi['total'] ?? 0) : 0,
+            'value' => ($hasilApi['status'] ?? false)
+                ? (int)($hasilApi['total'] ?? 0)
+                : (($hasilApi['success'] ?? false) ? (int)($hasilApi['data']['total'] ?? 0) : 0),
             'bg' => $style['bg'],
             'iconBg' => $style['iconBg'],
             'iconColor' => $style['iconColor'],
@@ -367,10 +378,16 @@ class PegawaiController extends Controller
 
     public function getByNip(string $nip): JsonResponse
     {
-        $hasilApi = $this->pegawaiService->getData([
+        $response = $this->pegawaiService->getData([
             'nip' => $nip
         ]);
 
-        return response()->json($hasilApi);
+        return response()->json([
+            'success' => $response->success,
+            'status' => $response->success,
+            'total' => is_array($response->data) ? count($response->data) : 0,
+            'data' => $response->data ?? [],
+            'message' => $response->message,
+        ]);
     }
 }

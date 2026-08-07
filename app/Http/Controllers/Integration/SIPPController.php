@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Services\Integrations\SIPPService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 
 class SIPPController extends Controller
 {
@@ -19,19 +20,20 @@ class SIPPController extends Controller
     public function testToken(): JsonResponse
     {
         try {
-            $token = $this->sippService->getToken();
+            $response = $this->sippService->getPublikasi(['per_page' => 1]);
 
             return response()->json([
-                'success' => true,
-                'token' => $token
+                'success' => $response->success,
+                'message' => $response->success ? 'Token berhasil diambil' : $response->message,
             ]);
         } catch (\Exception $e) {
+            Log::error('SIPP test token error', ['message' => $e->getMessage()]);
+
             return response()->json([
                 'success' => false,
                 'message' => $e->getMessage()
             ], 500);
         }
-
     }
 
     public function getPublikasiByNip(Request $request): JsonResponse
@@ -48,17 +50,18 @@ class SIPPController extends Controller
             'per_page' => $validated['per_page'] ?? 10,
         ];
 
-        $dataPublikasi = $this->sippService->getPublikasi($params);
+        $response = $this->sippService->getPublikasi($params);
 
         return response()->json([
-            'success' => true,
-            'data' => $dataPublikasi
+            'success' => $response->success,
+            'data' => $response->data ?? [],
+            'message' => $response->message,
         ]);
     }
 
     public function getPenelitianByNip(Request $request): JsonResponse
     {
-        $validated = request()->validate([
+        $validated = $request->validate([
             'nip' => ['required', 'string', 'max:50'],
             'page' => ['nullable', 'integer', 'min:1'],
             'per_page' => ['nullable', 'integer', 'min:1'],
@@ -70,11 +73,12 @@ class SIPPController extends Controller
             'per_page' => $validated['per_page'] ?? 10,
         ];
 
-        $dataPenelitian = $this->sippService->getPenelitian($params);
+        $response = $this->sippService->getPenelitian($params);
 
         return response()->json([
-            'success' => true,
-            'data' => $dataPenelitian
+            'success' => $response->success,
+            'data' => $response->data ?? [],
+            'message' => $response->message,
         ]);
     }
 

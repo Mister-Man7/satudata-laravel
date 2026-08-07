@@ -2,79 +2,116 @@
 
 namespace App\Services\Integrations;
 
-use Exception;
+use App\Services\DTO\ApiResponse;
 use Illuminate\Support\Facades\Cache;
-use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 
-class SIPPService
+class SIPPService extends AbstractApiClient
 {
-    protected string $baseUrl;
-    protected string $username;
-    protected string $password;
-
-    public function __construct()
+    protected function serviceName(): string
     {
-        $this->baseUrl = rtrim((string)config('services.sipp.base_url'), '/');
-        $this->username = (string)config('services.sipp.username');
-        $this->password = (string)config('services.sipp.password');
+        return 'sipp';
     }
 
-    public function getToken(): string
+    protected function config(): array
     {
-        return Cache::remember('sipp_bearer_token', now()->addMinutes(50), function () {
-            if (empty($this->baseUrl) || empty($this->username) || empty($this->password)) {
-                throw new Exception("Konfigurasi SIPP (Base URL, Username, atau Password) belum diatur di .env / config.");
+        return [
+            'base_url' => config('services.sipp.base_url'),
+            'auth_type' => 'bearer_login',
+            'connect_timeout' => 10,
+            'timeout' => 30,
+        ];
+    }
+
+    /**
+     * Override buildRequest untuk menambahkan Referer header.
+     */
+    protected function buildRequest(array $config): \Illuminate\Http\Client\PendingRequest
+    {
+        $request = parent::buildRequest($config);
+
+        if (!empty($config['base_url'])) {
+            $request = $request->withHeaders([
+                'Referer' => rtrim($config['base_url'], '/') . '/',
+            ]);
+        }
+
+        return $request;
+    }
+
+    /**
+     * Ambil bearer token via login, di-cache selama 50 menit.
+     *
+     * @throws \RuntimeException jika konfigurasi tidak lengkap atau login gagal
+     */
+    protected function getBearerToken(array $config): string
+    {
+        return Cache::remember('sipp_bearer_token', now()->addMinutes(50), function () use ($config) {
+            $baseUrl = $config['base_url'] ?? '';
+            $username = config('services.sipp.username');
+            $password = config('services.sipp.password');
+
+            if (empty($baseUrl) || empty($username) || empty($password)) {
+                Log::error('SIPP: Konfigurasi base_url, username, atau password belum diatur.');
+                throw new \RuntimeException('Konfigurasi SIPP belum lengkap.');
             }
 
-            $response = Http::post("{$this->baseUrl}/api/request-token", [
-                'username' => $this->username,
-                'password' => $this->password,
-            ]);
+            $response = \Illuminate\Support\Facades\Http::post(
+                rtrim($baseUrl, '/') . '/api/request-token',
+                [
+                    'username' => $username,
+                    'password' => $password,
+                ]
+            );
 
             if ($response->failed()) {
-                throw new Exception('Gagal mengambil token (Status ' . $response->status() . '): ' . $response->body());
+                Log::error('SIPP: Gagal mengambil token', [
+                    'status' => $response->status(),
+                ]);
+                throw new \RuntimeException('Gagal mengambil token SIPP.');
             }
 
             $data = $response->json();
-
             $token = $data['data']['access_token'] ?? $data['access_token'] ?? $data['token'] ?? null;
 
             if (!$token) {
-                throw new Exception("Token tidak ditemukan. Response dari server: " . json_encode($data));
+                Log::error('SIPP: Token tidak ditemukan dalam response');
+                throw new \RuntimeException('Token SIPP tidak ditemukan.');
             }
 
             return $token;
         });
     }
 
-    public function get(string $endpoint, array $queryParams = []): array
+    /**
+     * Override request untuk handle token expired (401) → refresh & retry sekali.
+     */
+    protected function request(string $method, string $endpoint, array $payload = []): ApiResponse
     {
-        $token = $this->getToken();
+        $response = parent::request($method, $endpoint, $payload);
 
-        $url = "{$this->baseUrl}/" . ltrim($endpoint, '/');
-
-        $response = Http::withToken($token)->get($url, $queryParams);
-
-        if ($response->status() === 401) {
+        if ($response->status === 401) {
             Cache::forget('sipp_bearer_token');
-            throw new Exception("Token SIPP expired atau tidak valid. Silakan coba lagi.");
+            Log::info('SIPP: Token expired, retry dengan token baru');
+            return parent::request($method, $endpoint, $payload);
         }
 
-        if ($response->failed()) {
-            throw new Exception("API SIPP Error ({$response->status()}): " . $response->body());
-        }
-
-        return $response->json();
+        return $response;
     }
 
-    public function getPublikasi(array $params = []): array
+    /**
+     * Ambil data publikasi.
+     */
+    public function getPublikasi(array $params = []): ApiResponse
     {
-        return $this->get('api/publikasi', $params);
+        return $this->get('/api/publikasi', $params);
     }
 
-    public function getPenelitian(array $params = []): array
+    /**
+     * Ambil data penelitian.
+     */
+    public function getPenelitian(array $params = []): ApiResponse
     {
-        return $this->get('api/penelitian', $params);
+        return $this->get('/api/penelitian', $params);
     }
-
 }

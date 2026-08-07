@@ -66,13 +66,6 @@
                             @endif
                         </div>
                     </div>
-
-                    {{--                    <div class="mt-auto mb-4">--}}
-                    {{--                        <h2 class="{{ is_numeric($card['count']) ? 'text-[5.5rem]' : 'text-3xl' }} leading-none font-normal tracking-tight text-black line-clamp-2">--}}
-                    {{--                            {{ $card['count'] }}--}}
-                    {{--                        </h2>--}}
-                    {{--                    </div>--}}
-
                     <div class="flex items-center justify-between mt-auto pt-2">
                         <span class="text-xs text-gray-600 font-medium">
                             Updated {{ \Carbon\Carbon::parse($card['updated'])->diffForHumans() }}
