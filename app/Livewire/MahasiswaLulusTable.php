@@ -44,9 +44,16 @@ class MahasiswaLulusTable extends Component
     {
         $hasilApi = $lulusanService->getListMahasiswa($this->parameterApi());
 
+        // Ekstrak wrapper pagination dari ApiResponse.
+        // Struktur API: data = [0 => {current_page, data: [...], total, per_page, ...}]
+        $dataApi = [];
+        if ($hasilApi->success && isset($hasilApi->data[0]) && is_array($hasilApi->data[0])) {
+            $dataApi = $hasilApi->data[0];
+        }
+
         return view('livewire.mahasiswa-lulus-table', [
             'result' => $hasilApi,
-            'mahasiswa' => $this->buatPaginator($hasilApi),
+            'mahasiswa' => $this->buatPaginator($dataApi),
         ]);
     }
 
