@@ -309,20 +309,46 @@ class AkademikController extends Controller
 
     private function agregasiDosenByFakultas(array $dataDosen): array
     {
-        $unitDikecualikan = ['Biro Perencanaan Keuangan dan Umum'];
+        // Mapping nama fakultas lengkap ke singkatan
+        $mappingFakultas = [
+            'Fakultas Hukum' => 'FH',
+            'Fakultas Teknik' => 'FT',
+            'Fakultas Keguruan dan Ilmu Pendidikan' => 'FKIP',
+            'Fakultas Ekonomi dan Bisnis' => 'FEB',
+            'Fakultas Ilmu Sosial dan Ilmu Politik' => 'FISIP',
+            'Fakultas Pertanian' => 'FAPERTA',
+            'Fakultas Kedokteran dan Ilmu Kesehatan' => 'FKIK',
+            'Pascasarjana' => 'Pascasarjana',
+        ];
 
         $kelompok = collect($dataDosen)
-            ->reject(function ($item) use ($unitDikecualikan) {
+            ->map(function ($item) use ($mappingFakultas) {
                 $unitKerja = trim((string)($item['unitKerja'] ?? ''));
-                return in_array($unitKerja, $unitDikecualikan, true);
-            })
-            ->groupBy(function ($item) {
-                return trim((string)($item['unitKerja'] ?? 'Tidak Teridentifikasi'));
-            });
 
-        return $kelompok->map(function ($items, $namaFakultas) {
+                // Cari mapping yang cocok
+                foreach ($mappingFakultas as $namaLengkap => $singkatan) {
+                    if (stripos($unitKerja, $namaLengkap) !== false ||
+                        strtolower($unitKerja) === strtolower($namaLengkap) ||
+                        strtolower($unitKerja) === strtolower($singkatan)) {
+                        $item['fakultasMapping'] = $singkatan;
+                        $item['namaLengkap'] = $namaLengkap;
+                        return $item;
+                    }
+                }
+
+                // Jika tidak ada mapping, tandai sebagai null untuk difilter
+                $item['fakultasMapping'] = null;
+                return $item;
+            })
+            ->filter(function ($item) {
+                return !is_null($item['fakultasMapping']);
+            })
+            ->groupBy('fakultasMapping');
+
+        return $kelompok->map(function ($items, $singkatanFakultas) {
+            $namaLengkap = $items->first()['namaLengkap'] ?? $singkatanFakultas;
             return [
-                'name' => $namaFakultas === '' ? 'Tidak Teridentifikasi' : $namaFakultas,
+                'name' => $namaLengkap,
                 'total' => $items->count(),
             ];
         })->sortByDesc('total')->values()->all();

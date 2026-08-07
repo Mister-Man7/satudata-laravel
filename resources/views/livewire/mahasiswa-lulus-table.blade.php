@@ -53,16 +53,16 @@
         Memuat data mahasiswa lulus...
     </div>
 
-    @if (!$result['tersedia'])
+    @if (!$result->success)
         <div role="alert" class="mb-6 rounded-2xl border border-amber-200 bg-amber-50 p-5 text-sm text-amber-800">
-            Data belum dapat dimuat dari SIAKANG. Periksa konfigurasi atau coba kembali beberapa saat lagi.
+            {{ $result->message ?: 'Data belum dapat dimuat dari SIAKANG. Periksa konfigurasi atau coba kembali beberapa saat lagi.' }}
         </div>
     @endif
 
     <div class="mb-4 rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
         <p class="text-sm text-slate-500">Total Data</p>
         <h2 class="mt-2 text-3xl font-extrabold text-gray-900">
-            {{ number_format(data_get($result, 'total', 0), 0, ',', '.') }}
+            {{ number_format($mahasiswa->total(), 0, ',', '.') }}
         </h2>
     </div>
 
@@ -89,7 +89,7 @@
                                 {{ data_get($item, 'nama') }}
                             </td>
                             <td class="px-5 py-4 text-gray-700">
-                                {{ data_get($item, 'prodi.nama_prodi_lengkap') }}
+                                {{ data_get($item, 'prodi.nama_prodi') }}
                             </td>
                             <td class="px-5 py-4 text-gray-700">
                                 {{ data_get($item, 'angkatan') }}

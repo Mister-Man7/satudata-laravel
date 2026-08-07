@@ -153,7 +153,7 @@ abstract class AbstractApiClient
 
         match ($authType) {
             'token' => $request->withToken($config['token'] ?? ''),
-            'api_key' => $request->withHeaders([
+            'api_key' => $request->withQueryParameters([
                 $config['api_key_header'] ?? '' => $config['api_key_value'] ?? '',
             ]),
             'bearer_login' => $request->withToken($this->getBearerToken($config)),
