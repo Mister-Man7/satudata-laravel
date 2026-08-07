@@ -398,7 +398,7 @@ window.initSebaranFakultasChart = function (ChartLibrary) {
     const shortLabels = fullNames.map(name => {
         if (name.includes('Teknik')) return 'FT';
         if (name.includes('Hukum')) return 'FH';
-        if (name.includes('Pertanian')) return 'FP';
+        if (name.includes('Pertanian')) return 'FAPERTA';
         if (name.includes('Kedokteran')) return 'FKIK';
         if (name.includes('Ekonomi')) return 'FEB';
         if (name.includes('Sosial')) return 'FISIP';
@@ -546,7 +546,7 @@ window.initDosenFakultasChart = function (ChartLibrary) {
     const shortLabels = fullNames.map(name => {
         if (name.includes('Teknik')) return 'FT';
         if (name.includes('Hukum')) return 'FH';
-        if (name.includes('Pertanian')) return 'FP';
+        if (name.includes('Pertanian')) return 'FAPERTA';
         if (name.includes('Kedokteran')) return 'FKIK';
         if (name.includes('Ekonomi')) return 'FEB';
         if (name.includes('Sosial')) return 'FISIP';

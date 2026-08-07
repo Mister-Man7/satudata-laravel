@@ -2,174 +2,77 @@
 
 namespace App\Services\Integrations;
 
-use Illuminate\Http\Client\ConnectionException;
+use App\Services\DTO\ApiResponse;
 use Illuminate\Support\Facades\Cache;
-use Illuminate\Support\Facades\Http;
 
-class SimpegPegawaiService
+class SimpegPegawaiService extends AbstractApiClient
 {
-
-    public function getData(array $parameter = []): array
+    protected function serviceName(): string
     {
-        $cacheKey = $this->buildCacheKey($parameter);
-
-        if (Cache::has($cacheKey)) {
-            return Cache::get($cacheKey);
-        }
-
-        $baseUrl = config('services.simpeg.base_url');
-        $apiKeyHeader = config('services.simpeg.key');
-        $apiKeyValue = config('services.simpeg.value');
-
-        if (!is_string($baseUrl) || filter_var($baseUrl, FILTER_VALIDATE_URL) === false) {
-            return $this->noResult();
-        }
-
-        if (!is_string($apiKeyHeader) || $apiKeyHeader === '') {
-            return $this->noResult();
-        }
-
-        if (!is_string($apiKeyValue) || $apiKeyValue === '') {
-            return $this->noResult();
-        }
-
-        try {
-            $response = Http::connectTimeout(3)
-                ->timeout(8)
-                ->acceptJson()
-                ->withHeaders([
-                    'Accept-Language' => 'id-ID,id;q=0.9,en-US;q=0.8',
-                    'Referer' => rtrim($baseUrl, '/') . '/',
-                    'User-Agent' => 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36',
-                    $apiKeyHeader => $apiKeyValue,
-                ])
-                ->get(rtrim($baseUrl, '/') . '/employee', $parameter);
-        } catch (ConnectionException) {
-            return $this->noResult();
-        }
-
-        if (!$response->successful()) {
-            return $this->noResult();
-        }
-
-        $isiResponse = $response->json();
-
-        if (!is_array($isiResponse)) {
-            return $this->noResult();
-        }
-
-        if (isset($isiResponse['total']) && is_numeric($isiResponse['total'])) {
-            $totalData = (int)$isiResponse['total'];
-            $dataPegawai = $isiResponse['data'] ?? [];
-        } elseif (isset($isiResponse['data']) && is_array($isiResponse['data'])) {
-            $dataPegawai = $isiResponse['data'];
-            $totalData = count($dataPegawai);
-        } else {
-            return $this->noResult();
-        }
-
-        $result = [
-            'status' => true,
-            'message' => 'Berhasil mengambil data pegawai',
-            'data' => $dataPegawai,
-            'total' => $totalData,
-            'halaman_sekarang' => 1,
-            'halaman_terakhir' => 1,
-        ];
-
-        Cache::put($cacheKey, $result, now()->addMinutes(5));
-
-        return $result;
+        return 'simpeg.pegawai';
     }
 
-    private function buildCacheKey(array $parameter = []): string
-    {
-        ksort($parameter);
-
-        return 'simpeg_pegawai_' . md5(json_encode($parameter));
-    }
-
-    public function noResult(): array
+    protected function config(): array
     {
         return [
-            'status' => false,
-            'message' => 'Data pegawai tidak tersedia',
-            'data' => [],
-            'total' => 0,
-            'halaman_sekarang' => 1,
-            'halaman_terakhir' => 1,
+            'base_url' => config('services.simpeg.base_url'),
+            'auth_type' => 'api_key',
+            'api_key_header' => config('services.simpeg.key', 'simpeg2023'),
+            'api_key_value' => config('services.simpeg.value'),
+            'connect_timeout' => 5,
+            'timeout' => 15,
         ];
     }
 
-    public function getDataDosen(string $endpoint = 'pegawai', array $parameter = []): array
+    /**
+     * Ambil data pegawai (cached).
+     */
+    public function getData(array $params = []): ApiResponse
     {
-        $baseUrl = config('services.simpeg.base_url');
-        $apiKeyHeader = config('services.simpeg.key');
-        $apiKeyValue = config('services.simpeg.value');
-
-        if (!is_string($baseUrl) || filter_var($baseUrl, FILTER_VALIDATE_URL) === false) {
-            return $this->noResult();
-        }
-
-        if (!is_string($apiKeyHeader) || $apiKeyHeader === '' || !is_string($apiKeyValue) || $apiKeyValue === '') {
-            return $this->noResult();
-        }
-
-        $url = rtrim($baseUrl, '/') . '/' . ltrim($endpoint, '/');
-        
-        $cacheKey = 'simpeg_dosen_' . md5($url . json_encode($parameter));
+        $cacheKey = 'simpeg_pegawai_' . md5(json_encode($params));
 
         if (Cache::has($cacheKey)) {
-            return Cache::get($cacheKey);
+            $cachedData = Cache::get($cacheKey);
+            return new ApiResponse(
+                success: true,
+                status: 200,
+                message: 'Data dari cache',
+                data: $cachedData,
+            );
         }
 
-        try {
-            $response = Http::connectTimeout(3)
-                ->timeout(8)
-                ->acceptJson()
-                ->withHeaders([
-                    'Accept-Language' => 'id-ID,id;q=0.9,en-US;q=0.8',
-                    'Referer' => rtrim($baseUrl, '/') . '/',
-                    'User-Agent' => 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36',
-                    $apiKeyHeader => $apiKeyValue,
-                ])
-                ->get($url, $parameter);
+        $response = $this->get('/employee', $params);
 
-        } catch (ConnectionException) {
-            return $this->noResult();
+        if ($response->success) {
+            Cache::put($cacheKey, $response->data, now()->addMinutes(5));
         }
 
-        if (!$response->successful()) {
-            return $this->noResult();
+        return $response;
+    }
+
+    /**
+     * Ambil data dosen (cached).
+     */
+    public function getDataDosen(string $endpoint = 'pegawai', array $params = []): ApiResponse
+    {
+        $cacheKey = 'simpeg_dosen_' . md5($endpoint . json_encode($params));
+
+        if (Cache::has($cacheKey)) {
+            $cachedData = Cache::get($cacheKey);
+            return new ApiResponse(
+                success: true,
+                status: 200,
+                message: 'Data dari cache',
+                data: $cachedData,
+            );
         }
 
-        $isiResponse = $response->json();
+        $response = $this->get('/' . ltrim($endpoint, '/'), $params);
 
-        if (!is_array($isiResponse) || !isset($isiResponse['data'])) {
-            return $this->noResult();
+        if ($response->success) {
+            Cache::put($cacheKey, $response->data, now()->addMinutes(5));
         }
 
-        $dataPegawai = $isiResponse['data'];
-
-        $dataDosen = array_filter($dataPegawai, function ($item) {
-            return isset($item['levelPegawai']) && stripos($item['levelPegawai'], 'Dosen') !== false;
-        });
-
-        $dataDosen = array_values($dataDosen);
-
-        $result = [
-            'status' => true,
-            'message' => 'Berhasil mengambil data dosen',
-            'data' => $dataDosen,
-            'total' => count($dataDosen),
-            'halaman_sekarang' => 1,
-            'halaman_terakhir' => 1,
-        ];
-
-        Cache::put($cacheKey, $result, now()->addMinutes(5));
-
-        return $result;
-
-
+        return $response;
     }
 }

@@ -4,11 +4,11 @@ namespace App\Services\Integrations;
 
 use App\Services\DTO\ApiResponse;
 
-class SiakangMahasiswaService extends AbstractApiClient
+class SiakangPenjadwalanService extends AbstractApiClient
 {
     protected function serviceName(): string
     {
-        return 'siakang.mahasiswa';
+        return 'siakang.penjadwalan';
     }
 
     protected function config(): array
@@ -18,15 +18,17 @@ class SiakangMahasiswaService extends AbstractApiClient
             'auth_type' => 'token',
             'token' => config('services.siakang.token'),
             'connect_timeout' => 10,
-            'timeout' => 30,
+            'timeout' => 60,
         ];
     }
 
     /**
-     * Ambil data mahasiswa.
+     * Ambil data penjadwalan dosen.
+     *
+     * @param  array{semester?: string, nip?: string}  $params
      */
     public function getData(array $params = []): ApiResponse
     {
-        return $this->get('/v2/mahasiswa', $params);
+        return $this->get('/v2/rencana-studi/penjadwalan', $params);
     }
 }

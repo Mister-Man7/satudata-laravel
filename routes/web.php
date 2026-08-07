@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Academic\AkademikController;
+use App\Http\Controllers\Academic\MonitoringPerkuliahanController;
 use App\Http\Controllers\Assets\AsetController;
 use App\Http\Controllers\HR\PegawaiController;
 use App\Http\Controllers\Integration\SIPPController;
@@ -16,6 +17,11 @@ Route::get('/akademik', [AkademikController::class, 'index'])
 
 Route::get('/akademik/mahasiswa-lulus', [AkademikController::class, 'mahasiswaLulus'])
     ->name('akademik.mahasiswa-lulus');
+
+Route::get('/akademik/perkuliahan', [MonitoringPerkuliahanController::class, 'index'])
+    ->name('akademik.perkuliahan');
+Route::get('/akademik/perkuliahan/detail/{unitKode}', [MonitoringPerkuliahanController::class, 'detail'])
+    ->name('akademik.perkuliahan.detail');
 
 Route::prefix('aset')->name('aset.')->group(function () {
     Route::get('/', [AsetController::class, 'index'])->name('index');
