@@ -421,8 +421,7 @@ class AkademikController extends Controller
             ->filter(function ($item) {
                 $statusKerja = trim((string)($item['statusKerja'] ?? ''));
 
-                // Kecualikan status yang tidak diketahui (kosong/null atau label 'Tidak Diketahui')
-                return $statusKerja !== '' && strtolower($statusKerja) !== 'tidak diketahui';
+                return $this->statusKerjaDikenal($statusKerja);
             })
             ->groupBy(function ($item) {
                 return trim((string)($item['statusKerja'] ?? ''));
@@ -434,6 +433,30 @@ class AkademikController extends Controller
                 'total' => $items->count(),
             ];
         })->sortByDesc('total')->values()->all();
+    }
+
+    /**
+     * Periksa apakah nilai status kepegawaian merupakan status yang dikenal
+     * (bukan kosong/null atau varian 'Tidak Diketahui').
+     */
+    private function statusKerjaDikenal(string $statusKerja): bool
+    {
+        $status = mb_strtolower(trim($statusKerja));
+        if ($status === '') {
+            return false;
+        }
+
+        // Normalisasi: hapus titik/koma/hubung/spasi ganda
+        // 'Tdk. Diketahui' => 'tdk diketahui', 'diketahui' => 'di ketahui'
+        $status = preg_replace('/[\s,.\-_]+/', ' ', $status);
+        $status = preg_replace('/\bdiketahui\b/', 'di ketahui', $status);
+        $status = preg_replace('/\s+/', ' ', $status);
+
+        if (preg_match('/\btidak\s+(?:di\s+)?ketahui\b|\btdk\s+(?:di\s+)?ketahui\b|\bunknown\b|\bn\/a\b|\bna\b/', $status)) {
+            return false;
+        }
+
+        return true;
     }
 
     public function mahasiswaLulus(Request $request): View
