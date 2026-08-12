@@ -1,8 +1,11 @@
 import Chart from 'chart.js/auto';
 import {marked} from "marked";
+import Alpine from 'alpinejs';
 
 window.Chart = Chart;
 window.marked = marked;
+window.Alpine = Alpine;
+Alpine.start();
 
 // chart Mahasiswa
 window.initStatistikMahasiswaCharts = function (ChartLibrary) {
