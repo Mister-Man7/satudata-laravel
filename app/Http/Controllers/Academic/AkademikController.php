@@ -72,9 +72,6 @@ class AkademikController extends Controller
             }
         }
 
-        // Derive tahun aktif dari kode semester yang ditampilkan
-        $tahunAktif = (int) substr($kodeSemesterTampil, 0, 4);
-        $tahunLalu = $tahunAktif - 1;
         $responseAktif = $this->aktifService->getData(['semester' => $kodeSemesterTampil]);
         $responseLulusan = $this->lulusanService->getData(['semester' => $kodeSemesterTampil]);
 
@@ -122,8 +119,8 @@ class AkademikController extends Controller
             $totalLulusanLalu = $dataLulusanLalu['total_mahasiswa_lulus'] ?? 0;
         }
 
-        $totalBaruSekarang = Mahasiswa::where('angkatan', $tahunAktif)->count();
-        $totalBaruLalu = Mahasiswa::where('angkatan', $tahunLalu)->count();
+        $totalBaruSekarang = $this->totalMahasiswaBaru($kodeSemesterTampil);
+        $totalBaruLalu = $this->totalMahasiswaBaru($kodeSemesterPembanding);
 
         $totalTidakAktifSekarang = 0;
         $totalTidakAktifLalu = 0;
@@ -167,7 +164,7 @@ class AkademikController extends Controller
                 'iconClass' => 'fa-regular fa-heart',
                 'badgeText' => $trendBaru['text'],
                 'badgeColor' => $trendBaru['color'],
-                'footerText' => 'Angkatan ' . $tahunAktif,
+                'footerText' => 'Semester ' . $kodeSemesterTampilString,
                 'href' => null,
             ],
         ];
@@ -361,6 +358,16 @@ class AkademikController extends Controller
         return (int) $total > 0 && count($prodi) > 0;
     }
 
+    /**
+     * Hitung jumlah mahasiswa baru pada semester tertentu berdasarkan periode
+     * masuk (payload->periode_masuk), agar trend konsisten dengan semester yang
+     * dipilih pada filter (bukan berdasarkan angkatan tahunan).
+     */
+    private function totalMahasiswaBaru(string $kodeSemester): int
+    {
+        return (int) Mahasiswa::where('payload->periode_masuk', $kodeSemester)->count();
+    }
+
     private function agregasiDosenByFakultas(array $dataDosen): array
     {
         // Mapping nama fakultas lengkap ke singkatan
@@ -439,9 +446,10 @@ class AkademikController extends Controller
     private function hitungTrend($current, $previous)
     {
         if ($previous == 0) {
+            // Persentase perubahan tidak dapat dihitung dari nol.
             return [
-                'text' => $current > 0 ? '+100%' : '0%',
-                'color' => $current > 0 ? 'bg-blue-500' : 'bg-gray-500'
+                'text' => $current > 0 ? 'N/A' : '0%',
+                'color' => $current > 0 ? 'bg-gray-400' : 'bg-gray-500'
             ];
         }
 
