@@ -3,6 +3,16 @@
 use App\Http\Controllers\Academic\AkademikController;
 use App\Models\Mahasiswa;
 
+function agregasiStatusDosen(array $dataDosen): array
+{
+    $controller = app(AkademikController::class);
+    $ref = new ReflectionClass($controller);
+    $method = $ref->getMethod('agregasiDosenByStatus');
+    $method->setAccessible(true);
+
+    return $method->invoke($controller, $dataDosen);
+}
+
 function hitungTrendNilai(int $current, int $previous): array
 {
     $controller = app(AkademikController::class);
@@ -42,6 +52,66 @@ function buatMahasiswa(string $nim, string $periodeMasuk, string $angkatan = '20
         'payload' => ['periode_masuk' => $periodeMasuk],
     ]);
 }
+
+test('agregasiDosenByStatus mengecualikan status "Tidak Diketahui" dalam berbagai varian', function () {
+    $data = [
+        ['statusKerja' => 'PNS'],
+        ['statusKerja' => 'PPPK'],
+        ['statusKerja' => 'Tidak Diketahui'],
+        ['statusKerja' => 'tidak diketahui'],
+        ['statusKerja' => 'TIDAK DIKETAHUI'],
+        ['statusKerja' => 'Tdk. Diketahui'],
+        ['statusKerja' => 'Tidak di Ketahui'],
+        ['statusKerja' => 'Unknown'],
+        ['statusKerja' => 'N/A'],
+    ];
+
+    $result = agregasiStatusDosen($data);
+
+    expect($result)->toBeArray()
+        ->toHaveCount(2);
+
+    $labels = array_column($result, 'label');
+    expect($labels)->not->toContain('Tidak Diketahui')
+        ->and($labels)->not->toContain('')
+        ->and($labels)->toMatchArray(['PNS', 'PPPK']);
+});
+
+test('agregasiDosenByStatus mengecualikan status kosong atau null', function () {
+    $data = [
+        ['statusKerja' => 'PNS'],
+        ['statusKerja' => ''],
+        ['statusKerja' => null],
+        [],
+    ];
+
+    $result = agregasiStatusDosen($data);
+
+    expect($result)->toHaveCount(1)
+        ->and($result[0]['label'])->toBe('PNS')
+        ->and($result[0]['total'])->toBe(1);
+});
+
+test('agregasiDosenByStatus tetap menyertakan status kepegawaian yang sah', function () {
+    $data = [
+        ['statusKerja' => 'PNS'],
+        ['statusKerja' => 'PNS'],
+        ['statusKerja' => 'PPPK'],
+        ['statusKerja' => 'Honorer'],
+        ['statusKerja' => 'PPPK Paruh Waktu'],
+    ];
+
+    $result = agregasiStatusDosen($data);
+
+    expect($result)->toHaveCount(4);
+
+    $byLabel = collect($result)->keyBy('label');
+    expect($byLabel['PNS']['total'])->toBe(2)
+        ->and($byLabel['PPPK']['total'])->toBe(1)
+        ->and($byLabel['Honorer']['total'])->toBe(1)
+        ->and($byLabel['PPPK Paruh Waktu']['total'])->toBe(1);
+});
+
 test('totalMahasiswaBaru menghitung berdasarkan periode_masuk semester yang dipilih', function () {
     buatMahasiswa('1111250001', '20251');
     buatMahasiswa('1111250002', '20251');
