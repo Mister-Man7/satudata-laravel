@@ -18,7 +18,7 @@ class SiakangMahasiswaAktifService extends AbstractApiClient
             'auth_type' => 'token',
             'token' => config('services.siakang.token'),
             'connect_timeout' => 10,
-            'timeout' => 60,
+            'timeout' => 90,
         ];
     }
 

@@ -8,10 +8,48 @@
     @endphp
 
     <section class="mx-auto max-w-7xl px-4 py-4 sm:px-6 lg:px-8">
-        <div class="mb-4">
-            <h1 class="font-bold mb-4 text-2xl text-gray-800">
+        <div class="mb-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <h1 class="font-bold text-2xl text-gray-800">
                 Ringkasan Data Mahasiswa
             </h1>
+
+            @php
+                $labelSemesterAktif = $daftarSemester[$kodeSemesterTampil] ?? $kodeSemesterTampil;
+            @endphp
+            <div class="relative inline-block" x-data="{ open: false }">
+                <button @click="open = !open" @keydown.escape="open = false"
+                    class="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-colors cursor-pointer">
+                    <svg class="h-4 w-4" :class="{ 'rotate-180': open }" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+                    </svg>
+                    Ganti Semester
+                </button>
+                <div x-show="open" @click.outside="open = false" x-cloak
+                    x-transition:enter="transition ease-out duration-100"
+                    x-transition:enter-start="opacity-0 scale-95"
+                    x-transition:enter-end="opacity-100 scale-100"
+                    x-transition:leave="transition ease-in duration-75"
+                    x-transition:leave-start="opacity-100 scale-100"
+                    x-transition:leave-end="opacity-0 scale-95"
+                    class="absolute right-0 z-50 mt-2 w-72 origin-top-right rounded-xl bg-white shadow-lg ring-1 ring-black/5 focus:outline-none max-h-80 overflow-y-auto">
+                    <div class="py-1">
+                        @foreach ($daftarSemester as $kode => $label)
+                            <a href="{{ route('akademik', ['semester' => $kode]) }}"
+                                class="block px-4 py-2.5 text-sm transition-colors
+                                    {{ $kode === $kodeSemesterTampil
+                                        ? 'bg-blue-50 text-blue-700 font-semibold'
+                                        : 'text-gray-700 hover:bg-gray-50' }}">
+                                {{ $label }}
+                                @if ($kode === $kodeSemesterTampil)
+                                    <svg class="inline ml-1.5 h-4 w-4 text-blue-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                                    </svg>
+                                @endif
+                            </a>
+                        @endforeach
+                    </div>
+                </div>
+            </div>
         </div>
 
         <div class="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">

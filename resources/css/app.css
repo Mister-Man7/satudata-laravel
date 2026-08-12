@@ -23,6 +23,11 @@
     --color-blue-custom-600: #0E66D1;
 }
 
+/* Alpine.js x-cloak - hide elements until Alpine initializes */
+[x-cloak] {
+    display: none !important;
+}
+
 /* TirtaAgent Chat UI */
 .tirta-quick-prompts {
     scrollbar-width: none;

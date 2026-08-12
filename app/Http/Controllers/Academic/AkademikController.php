@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Academic;
 
 use App\Http\Controllers\Controller;
 use App\Models\Mahasiswa;
+use App\Services\DTO\ApiResponse;
 use App\Services\Integrations\SiakangLulusanService;
 use App\Services\Integrations\SiakangMahasiswaAktifService;
 use App\Services\Integrations\SimpegPegawaiService;
@@ -21,7 +22,7 @@ class AkademikController extends Controller
     {
     }
 
-    public function index(): View
+    public function index(Request $request): View
     {
         $waktuSekarang = now();
         $tahunNow = now()->year;
@@ -47,18 +48,47 @@ class AkademikController extends Controller
             ];
         }
 
-        $tahunAktif = $waktuSekarang->month < 7 ? $waktuSekarang->year - 1 : $waktuSekarang->year;
+        // Daftar semester yang tersedia di dropdown
+        $daftarSemester = $this->daftarSemester($tahunNow);
+
+        // Tentukan semester yang dipilih
+        $semesterPilihan = $request->input('semester');
+
+        if ($semesterPilihan && array_key_exists($semesterPilihan, $daftarSemester)) {
+            // Pengguna memilih semester secara eksplisit
+            $kodeSemesterTampil = $semesterPilihan;
+        } else {
+            // Auto-detect semester berjalan dengan fallback
+            $kodeSemesterBerjalan = $waktuSekarang->month < 8
+                ? ($waktuSekarang->year - 1) . '2'
+                : $waktuSekarang->year . '1';
+            $kodeSemesterLalu = $this->semesterSebelumnya($kodeSemesterBerjalan);
+
+            $responseAktifProbe = $this->aktifService->getData(['semester' => $kodeSemesterBerjalan]);
+            if ($this->dataMahasiswaAktifTersedia($responseAktifProbe)) {
+                $kodeSemesterTampil = $kodeSemesterBerjalan;
+            } else {
+                $kodeSemesterTampil = $kodeSemesterLalu;
+            }
+        }
+
+        // Derive tahun aktif dari kode semester yang ditampilkan
+        $tahunAktif = (int) substr($kodeSemesterTampil, 0, 4);
         $tahunLalu = $tahunAktif - 1;
+        $responseAktif = $this->aktifService->getData(['semester' => $kodeSemesterTampil]);
+        $responseLulusan = $this->lulusanService->getData(['semester' => $kodeSemesterTampil]);
 
-        $kodeSemesterSekarang = ($tahunAktif - 1) . '2';
-        $kodeSemesterLalu = ($tahunAktif - 1) . '1';
-        $tahunLaluStr = substr($kodeSemesterLalu, 0, 4);
-        $tipeSemester = substr($kodeSemesterLalu, -1) == '1' ? 'Ganjil' : 'Genap';
-        $kodeSemesterLaluString = $tipeSemester . ' ' . $tahunLaluStr;
+        // Label semester yang benar-benar ditampilkan (untuk footer kartu)
+        $tipeSemesterTampil = substr($kodeSemesterTampil, -1) == '1' ? 'Ganjil' : 'Genap';
+        $kodeSemesterTampilString = $tipeSemesterTampil . ' ' . substr($kodeSemesterTampil, 0, 4);
 
-        $responseAktif = $this->aktifService->getData(['semester' => $kodeSemesterSekarang]);
-        $responseLulusan = $this->lulusanService->getData(['semester' => $kodeSemesterSekarang]);
-        $responseLulusanLalu = $this->lulusanService->getData(['semester' => $kodeSemesterLalu]);
+        // Semester pembanding (sebelum semester yang ditampilkan) untuk perhitungan trend
+        $kodeSemesterPembanding = $this->semesterSebelumnya($kodeSemesterTampil);
+        $responseLulusanLalu = $this->lulusanService->getData(['semester' => $kodeSemesterPembanding]);
+        $responseAktifLalu = $this->aktifService->getData(['semester' => $kodeSemesterPembanding]);
+        $totalAktifLalu = $responseAktifLalu->success && is_array($responseAktifLalu->data)
+            ? (int) ($responseAktifLalu->data['total_mahasiswa_aktif'] ?? 0)
+            : 0;
 
         $totalAktifSekarang = 0;
         $detailFakultasAktif = [];
@@ -98,7 +128,7 @@ class AkademikController extends Controller
         $totalTidakAktifSekarang = 0;
         $totalTidakAktifLalu = 0;
 
-        $trendAktif = $this->hitungTrend($totalAktifSekarang, $kodeSemesterLalu);
+        $trendAktif = $this->hitungTrend($totalAktifSekarang, $totalAktifLalu);
         $trendLulusan = $this->hitungTrend($totalLulusanSekarang, $totalLulusanLalu);
         $trendBaru = $this->hitungTrend($totalBaruSekarang, $totalBaruLalu);
         $trendTidakAktif = $this->hitungTrend($totalTidakAktifSekarang, $totalTidakAktifLalu);
@@ -110,7 +140,7 @@ class AkademikController extends Controller
                 'iconClass' => 'fa-regular fa-user',
                 'badgeText' => $trendAktif['text'],
                 'badgeColor' => $trendAktif['color'],
-                'footerText' => "Semester $kodeSemesterLaluString",
+                'footerText' => "Semester $kodeSemesterTampilString",
                 'href' => null,
             ],
             [
@@ -128,7 +158,7 @@ class AkademikController extends Controller
                 'iconClass' => 'fa-solid fa-arrow-up-right-from-square',
                 'badgeText' => $trendLulusan['text'],
                 'badgeColor' => $trendLulusan['color'],
-                'footerText' => 'Semester ' . $kodeSemesterLaluString,
+                'footerText' => 'Semester ' . $kodeSemesterTampilString,
                 'href' => route('akademik.mahasiswa-lulus'),
             ],
             [
@@ -137,7 +167,7 @@ class AkademikController extends Controller
                 'iconClass' => 'fa-regular fa-heart',
                 'badgeText' => $trendBaru['text'],
                 'badgeColor' => $trendBaru['color'],
-                'footerText' => 'Angkatan ' . $tahunLalu,
+                'footerText' => 'Angkatan ' . $tahunAktif,
                 'href' => null,
             ],
         ];
@@ -304,7 +334,31 @@ class AkademikController extends Controller
             'dosenByFakultas' => $dosenByFakultas,
             'dosenByStatus' => $dosenByStatus,
             'totalDosen' => $totalDosen,
+
+            'daftarSemester' => $daftarSemester,
+            'kodeSemesterTampil' => $kodeSemesterTampil,
         ]);
+    }
+
+    private function semesterSebelumnya(string $kodeSemester): string
+    {
+        $tahunAkademik = (int) substr($kodeSemester, 0, 4);
+
+        return substr($kodeSemester, -1) === '1'
+            ? ($tahunAkademik - 1) . '2'
+            : $tahunAkademik . '1';
+    }
+
+    private function dataMahasiswaAktifTersedia(ApiResponse $response): bool
+    {
+        if (!$response->success || !is_array($response->data)) {
+            return false;
+        }
+
+        $total = $response->data['total_mahasiswa_aktif'] ?? $response->data['total'] ?? 0;
+        $prodi = $response->data['detail_per_prodi'] ?? [];
+
+        return (int) $total > 0 && count($prodi) > 0;
     }
 
     private function agregasiDosenByFakultas(array $dataDosen): array
@@ -356,13 +410,20 @@ class AkademikController extends Controller
 
     private function agregasiDosenByStatus(array $dataDosen): array
     {
-        $kelompok = collect($dataDosen)->groupBy(function ($item) {
-            return trim((string)($item['statusKerja'] ?? ''));
-        });
+        $kelompok = collect($dataDosen)
+            ->filter(function ($item) {
+                $statusKerja = trim((string)($item['statusKerja'] ?? ''));
+
+                // Kecualikan status yang tidak diketahui (kosong/null atau label 'Tidak Diketahui')
+                return $statusKerja !== '' && strtolower($statusKerja) !== 'tidak diketahui';
+            })
+            ->groupBy(function ($item) {
+                return trim((string)($item['statusKerja'] ?? ''));
+            });
 
         return $kelompok->map(function ($items, $statusKerja) {
             return [
-                'label' => $statusKerja === '' ? 'Tidak Diketahui' : $statusKerja,
+                'label' => $statusKerja,
                 'total' => $items->count(),
             ];
         })->sortByDesc('total')->values()->all();
@@ -402,6 +463,21 @@ class AkademikController extends Controller
             'text' => '0%',
             'color' => 'bg-gray-400'
         ];
+    }
+
+    /**
+     * Bangun daftar semester yang tersedia untuk filter dropdown.
+     * Format kode: YYYYT (T=1 Gasal/Ganjil, T=2 Genap).
+     */
+    private function daftarSemester(int $tahunSekarang): array
+    {
+        $semesters = [];
+        for ($t = $tahunSekarang - 3; $t <= $tahunSekarang; $t++) {
+            $semesters[$t . '1'] = $t . '/' . ($t + 1) . ' - Semester Ganjil';
+            $semesters[$t . '2'] = $t . '/' . ($t + 1) . ' - Semester Genap';
+        }
+
+        return $semesters;
     }
 }
 
