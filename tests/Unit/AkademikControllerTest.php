@@ -166,3 +166,35 @@ test('hitungTrend menampilkan 0% saat nilai sekarang dan pembanding nol', functi
     expect($trend['text'])->toBe('0%')
         ->and($trend['color'])->toBe('bg-gray-500');
 });
+
+function semesterTahunSebelumnyaNilai(string $kodeSemester): string
+{
+    $controller = app(AkademikController::class);
+    $ref = new ReflectionClass($controller);
+    $method = $ref->getMethod('semesterTahunSebelumnya');
+    $method->setAccessible(true);
+
+    return $method->invoke($controller, $kodeSemester);
+}
+
+function semesterSebelumnyaNilai(string $kodeSemester): string
+{
+    $controller = app(AkademikController::class);
+    $ref = new ReflectionClass($controller);
+    $method = $ref->getMethod('semesterSebelumnya');
+    $method->setAccessible(true);
+
+    return $method->invoke($controller, $kodeSemester);
+}
+
+test('semesterTahunSebelumnya membandingkan semester yang sama di tahun sebelumnya', function () {
+    expect(semesterTahunSebelumnyaNilai('20251'))->toBe('20241')
+        ->and(semesterTahunSebelumnyaNilai('20252'))->toBe('20242')
+        ->and(semesterTahunSebelumnyaNilai('20241'))->toBe('20231')
+        ->and(semesterTahunSebelumnyaNilai('20211'))->toBe('20201');
+});
+
+test('semesterSebelumnya tetap mengembalikan semester urutan sebelumnya untuk fallback filter', function () {
+    expect(semesterSebelumnyaNilai('20251'))->toBe('20242')
+        ->and(semesterSebelumnyaNilai('20252'))->toBe('20251');
+});

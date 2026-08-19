@@ -61,6 +61,11 @@
         </div>
     </section>
 
+    {{-- Statistik Mahasiswa (Lazy Loaded with Shimmer) --}}
+    <section class="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
+        <livewire:dashboard.statistik-mahasiswa />
+    </section>
+
     <section class="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
         <div class="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div class="flex items-center justify-center gap-3 sm:justify-start">
