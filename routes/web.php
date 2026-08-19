@@ -22,6 +22,8 @@ Route::get('/akademik/perkuliahan', [MonitoringPerkuliahanController::class, 'in
     ->name('akademik.perkuliahan');
 Route::get('/akademik/perkuliahan/detail/{unitKode}', [MonitoringPerkuliahanController::class, 'detail'])
     ->name('akademik.perkuliahan.detail');
+Route::get('/akademik/perkuliahan/dosen/{nip}', [\App\Http\Controllers\Academic\DosenProfileController::class, 'show'])
+    ->name('akademik.perkuliahan.dosen');
 
 Route::prefix('aset')->name('aset.')->group(function () {
     Route::get('/', [AsetController::class, 'index'])->name('index');

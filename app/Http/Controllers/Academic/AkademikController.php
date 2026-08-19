@@ -79,8 +79,12 @@ class AkademikController extends Controller
         $tipeSemesterTampil = substr($kodeSemesterTampil, -1) == '1' ? 'Ganjil' : 'Genap';
         $kodeSemesterTampilString = $tipeSemesterTampil . ' ' . substr($kodeSemesterTampil, 0, 4);
 
-        // Semester pembanding (sebelum semester yang ditampilkan) untuk perhitungan trend
-        $kodeSemesterPembanding = $this->semesterSebelumnya($kodeSemesterTampil);
+        // Semester pembanding untuk perhitungan trend: semester yang sama di tahun
+        // sebelumnya (mis. 20251 dibandingkan dengan 20241). Intake mahasiswa
+        // terjadi sekali per tahun akademik, jadi perbandingan ini lebih adil
+        // daripada membandingkan semester urutan sebelumnya (mis. 20251 vs 20242)
+        // yang mencampur fase ganjil/genap yang volumenya tidak sebanding.
+        $kodeSemesterPembanding = $this->semesterTahunSebelumnya($kodeSemesterTampil);
         $responseLulusanLalu = $this->lulusanService->getData(['semester' => $kodeSemesterPembanding]);
         $responseAktifLalu = $this->aktifService->getData(['semester' => $kodeSemesterPembanding]);
         $totalAktifLalu = $responseAktifLalu->success && is_array($responseAktifLalu->data)
@@ -344,6 +348,19 @@ class AkademikController extends Controller
         return substr($kodeSemester, -1) === '1'
             ? ($tahunAkademik - 1) . '2'
             : $tahunAkademik . '1';
+    }
+
+    /**
+     * Kode semester yang sama satu tahun sebelumnya (mis. 20251 -> 20241,
+     * 20252 -> 20242). Dipakai sebagai pembanding trend agar perbandingan
+     * dilakukan antar semester dengan tipe yang sama (Ganjil vs Ganjil,
+     * Genap vs Genap) karena intake mahasiswa terjadi sekali per tahun.
+     */
+    private function semesterTahunSebelumnya(string $kodeSemester): string
+    {
+        $tahunAkademik = (int) substr($kodeSemester, 0, 4);
+
+        return ($tahunAkademik - 1) . substr($kodeSemester, -1);
     }
 
     private function dataMahasiswaAktifTersedia(ApiResponse $response): bool

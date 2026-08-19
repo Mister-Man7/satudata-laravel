@@ -121,7 +121,15 @@
                                         <div class="flex items-center gap-2 mt-0.5 text-xs text-gray-500">
                                             <span class="inline-flex items-center gap-1">
                                                 <i class="fa-regular fa-user"></i>
-                                                {{ $row['nama_dosen'] }}
+                                                @if(!empty($row['nip_dosen']) && $row['nip_dosen'] !== '-')
+                                                    <a href="{{ route('akademik.perkuliahan.dosen', ['nip' => $row['nip_dosen'], 'semester' => $semester]) }}"
+                                                       class="text-blue-600 hover:text-blue-800 hover:underline font-medium"
+                                                       title="Lihat Profil Dosen">
+                                                        {{ $row['nama_dosen'] }}
+                                                    </a>
+                                                @else
+                                                    {{ $row['nama_dosen'] }}
+                                                @endif
                                             </span>
                                         </div>
                                     </div>

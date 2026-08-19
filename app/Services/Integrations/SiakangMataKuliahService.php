@@ -17,8 +17,8 @@ class SiakangMataKuliahService extends AbstractApiClient
             'base_url' => config('services.siakang.base_url'),
             'auth_type' => 'token',
             'token' => config('services.siakang.token'),
-            'connect_timeout' => 10,
-            'timeout' => 60,
+            'connect_timeout' => 5,
+            'timeout' => 15,
         ];
     }
 

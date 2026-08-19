@@ -1,42 +1,81 @@
 <?php
 
-namespace App\View\Components\Dashboard;
+namespace App\Livewire\Dashboard;
 
 use App\Services\Integrations\SiakangLulusanService;
 use App\Services\Integrations\SiakangMahasiswaAktifService;
-use Closure;
 use Illuminate\Contracts\View\View;
-use Illuminate\View\Component;
+use Livewire\Component;
 
 class StatistikMahasiswa extends Component
 {
-    public string $title;
+    public string $title = 'Total Mahasiswa';
+    public string $subtitle = 'Ringkasan mahasiswa per fakultas dengan filter tahun akademik, semester, dan fakultas.';
+    public array $summaryCards = [];
+    public array $academicYears = [];
+    public array $semesters = [];
+    public array $faculties = [];
+    public array $chartPayload = [];
+    public string $selectedYear = '';
+    public string $selectedSemester = '';
+    public string $selectedFaculty = 'Semua Fakultas';
+    public bool $isLoading = true;
 
-    public string $subtitle;
-    public array $summaryCards;
-    public array $academicYears;
-    public array $semesters;
-    public array $faculties;
-    public array $chartPayload;
-    public string $selectedYear;
-    public string $selectedSemester;
-
-    public function __construct(
-        SiakangMahasiswaAktifService $aktifService,
-        SiakangLulusanService        $lulusanService,
-        string                       $title = 'Total Mahasiswa',
-        string                       $subtitle = 'Ringkasan mahasiswa per fakultas dengan filter tahun akademik, semester, dan fakultas.'
-    )
+    public function placeholder(): string
     {
-        $this->title = $title;
-        $this->subtitle = $subtitle;
+        return <<<'HTML'
+        <div class="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+            <div class="shimmer-card">
+                <div class="grid grid-cols-12 gap-6">
+                    <div class="col-span-12 flex flex-col gap-3 lg:col-span-7 lg:justify-center">
+                        <div>
+                            <div class="shimmer shimmer-text-lg"></div>
+                            <div class="shimmer shimmer-text-sm"></div>
+                        </div>
+                    </div>
+                    <div class="col-span-12 grid grid-cols-1 gap-3 sm:grid-cols-3 lg:col-span-5 lg:items-end">
+                        <label class="space-y-2">
+                            <span class="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Tahun Akademik</span>
+                            <div class="shimmer shimmer-select"></div>
+                        </label>
+                        <label class="space-y-2">
+                            <span class="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Semester</span>
+                            <div class="shimmer shimmer-select"></div>
+                        </label>
+                        <label class="space-y-2">
+                            <span class="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Fakultas</span>
+                            <div class="shimmer shimmer-select"></div>
+                        </label>
+                    </div>
+                    <div class="col-span-12 rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5 lg:p-6">
+                        <div class="mb-5 flex flex-col gap-3 border-b border-slate-100 pb-4 sm:flex-row sm:items-end sm:justify-between">
+                            <div class="flex gap-4">
+                                <div class="shimmer shimmer-summary w-32"></div>
+                                <div class="shimmer shimmer-summary w-32"></div>
+                                <div class="shimmer shimmer-summary w-32"></div>
+                                <div class="shimmer shimmer-summary w-32"></div>
+                            </div>
+                        </div>
+                        <div class="shimmer shimmer-chart"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        HTML;
+    }
 
+    public function mount(): void
+    {
         $this->academicYears = ['2025/2026', '2024/2025', '2023/2024', '2022/2023'];
         $this->semesters = ['Ganjil', 'Genap', 'Antara'];
 
         $this->selectedYear = request('tahun', '2024/2025');
         $this->selectedSemester = request('semester', 'Ganjil');
+        $this->selectedFaculty = request('fakultas', 'Semua Fakultas');
+    }
 
+    public function loadData(SiakangMahasiswaAktifService $aktifService, SiakangLulusanService $lulusanService): void
+    {
         $tahunAngka = substr($this->selectedYear, 0, 4);
         $angkaSemester = match ($this->selectedSemester) {
             'Ganjil' => '1',
@@ -53,8 +92,11 @@ class StatistikMahasiswa extends Component
 
         $responseLulusan = $lulusanService->getData(['limit' => 1, 'page' => 1]);
 
+        $dataAktif = $responseAktif->success ? (array) $responseAktif->data : [];
+        $dataLulusan = $responseLulusan->success ? (array) $responseLulusan->data : [];
+
         $daftarFakultasApi = ['Semua Fakultas'];
-        $dataFakultas = $responseAktif['detail_per_fakultas'] ?? [];
+        $dataFakultas = $dataAktif['detail_per_fakultas'] ?? [];
         foreach ($dataFakultas as $item) {
             $namaFak = $item['nama_fakultas'] ?? '';
             if (empty($namaFak) || str_ireplace(' ', '', $namaFak) === 'Tidakadafakultas' || str_contains(strtolower($namaFak), 'tidak ada')) {
@@ -64,7 +106,7 @@ class StatistikMahasiswa extends Component
         }
         $this->faculties = $daftarFakultasApi;
 
-        $this->summaryCards = $this->buildSummaryCards($responseAktif, $responseLulusan);
+        $this->summaryCards = $this->buildSummaryCards($dataAktif, $dataLulusan);
         $this->chartPayload = [
             'filters' => [
                 'years' => $this->academicYears,
@@ -74,15 +116,17 @@ class StatistikMahasiswa extends Component
             'defaultSelection' => [
                 'year' => $this->selectedYear,
                 'semester' => $this->selectedSemester,
-                'faculty' => 'Semua Fakultas',
+                'faculty' => $this->selectedFaculty,
             ],
-            'chartCatalog' => $this->buildChartCatalog($responseAktif),
+            'chartCatalog' => $this->buildChartCatalog($dataAktif),
         ];
+
+        $this->isLoading = false;
     }
 
-    public function render(): View|Closure|string
+    public function render(): View
     {
-        return view('components.dashboard.statistik-mahasiswa', [
+        return view('livewire.dashboard.statistik-mahasiswa', [
             'title' => $this->title,
             'subtitle' => $this->subtitle,
             'summaryCards' => $this->summaryCards,
@@ -90,15 +134,32 @@ class StatistikMahasiswa extends Component
             'semesters' => $this->semesters,
             'faculties' => $this->faculties,
             'chartPayload' => $this->chartPayload,
+            'selectedYear' => $this->selectedYear,
+            'selectedSemester' => $this->selectedSemester,
+            'selectedFaculty' => $this->selectedFaculty,
         ]);
+    }
+
+    public function updatedSelectedYear(): void
+    {
+        $this->dispatch('statistik-mahasiswa-filter-changed');
+    }
+
+    public function updatedSelectedSemester(): void
+    {
+        $this->dispatch('statistik-mahasiswa-filter-changed');
+    }
+
+    public function updatedSelectedFaculty(): void
+    {
+        $this->dispatch('statistik-mahasiswa-filter-changed');
     }
 
     private function buildSummaryCards(array $responseAktif, array $responseLulusan): array
     {
+        $totalAktif = (!empty($responseAktif['tersedia']) && !empty($responseAktif['total_mahasiswa_aktif'])) ? (int)$responseAktif['total_mahasiswa_aktif'] : 0;
 
-        $totalAktif = $responseAktif['tersedia'] ? (int)$responseAktif['total_mahasiswa_aktif'] : 0;
-
-        $totalLulusan = $responseLulusan['tersedia'] ? (int)$responseLulusan['total'] : 0;
+        $totalLulusan = (!empty($responseLulusan['tersedia']) && !empty($responseLulusan['total'])) ? (int)$responseLulusan['total'] : 0;
 
         $totalMahasiswa = $totalAktif + $totalLulusan;
 

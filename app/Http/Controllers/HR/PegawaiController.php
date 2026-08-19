@@ -3,9 +3,11 @@
 namespace App\Http\Controllers\HR;
 
 use App\Http\Controllers\Controller;
+use App\Services\DTO\ApiResponse;
 use App\Services\Integrations\SimpegPegawaiService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Http;
 use Illuminate\View\View;
 
 class PegawaiController extends Controller
@@ -27,7 +29,8 @@ class PegawaiController extends Controller
         $statusPegawai = $this->buildStatusCards();
         $datas = $this->buildWorkStatusCards();
         $levelPegawai = $this->buildLevelCards();
-        $guruBesar = $this->getQuickCount(['jabatan' => 44]);
+        $guruBesarResponse = $this->getQuickCount(['jabatan' => 44]);
+        $guruBesar = $this->extractTotal($guruBesarResponse);
 
         // Siapkan data untuk 3 chart
         $chartStatusPegawai = $this->buildChartData($statusPegawai);
@@ -104,17 +107,16 @@ class PegawaiController extends Controller
         ];
     }
 
-    private function getQuickCount(array $parameters): array
+    private function getQuickCount(array $parameters): ApiResponse
     {
-        $response = $this->pegawaiService->getData(array_merge(['count' => 1], $parameters));
-        return $response->success ? $response->data : [];
+        return $this->pegawaiService->getData(array_merge(['count' => 1], $parameters));
     }
 
-    private function statistikStatusKerja(string $title, array $hasilApi): array
+    private function statistikStatusKerja(string $title, ApiResponse $hasilApi): array
     {
         return [
             'label' => $title,
-            'value' => ($hasilApi['status'] ?? false) ? (int)($hasilApi['total'] ?? 0) : 0,
+            'value' => $this->extractTotal($hasilApi),
             'bg' => 'bg-[#4F46E5]',
             'iconBg' => 'bg-white',
             'iconColor' => 'text-indigo-700',
@@ -301,28 +303,24 @@ class PegawaiController extends Controller
 
     private function statistikPegawai(
         string $title,
-        array  $hasilApi
+        ApiResponse $hasilApi
     ): array
     {
         $style = $this->styleStatusPegawai($title);
 
         return [
             'label' => $title,
-            'value' => ($hasilApi['status'] ?? false)
-                ? (int)($hasilApi['total'] ?? 0)
-                : (($hasilApi['success'] ?? false) ? (int)($hasilApi['data']['total'] ?? 0) : 0),
-
+            'value' => $this->extractTotal($hasilApi),
             'span' => $style['span'],
             'bg' => $style['bg'],
             'icon' => $style['icon'],
             'text' => $style['text'],
-
             'iconBg' => $style['iconBg'],
             'iconColor' => $style['iconColor'],
         ];
     }
 
-    private function formatCard(string $title, array $hasilApi): array
+    private function formatCard(string $title, ApiResponse $hasilApi): array
     {
         $styles = [
             'Tendik' => [
@@ -365,9 +363,7 @@ class PegawaiController extends Controller
 
         return [
             'label' => $title,
-            'value' => ($hasilApi['status'] ?? false)
-                ? (int)($hasilApi['total'] ?? 0)
-                : (($hasilApi['success'] ?? false) ? (int)($hasilApi['data']['total'] ?? 0) : 0),
+            'value' => $this->extractTotal($hasilApi),
             'bg' => $style['bg'],
             'iconBg' => $style['iconBg'],
             'iconColor' => $style['iconColor'],
@@ -389,5 +385,21 @@ class PegawaiController extends Controller
             'data' => $response->data ?? [],
             'message' => $response->message,
         ]);
+    }
+
+    /**
+     * Extract total from ApiResponse data
+     */
+    private function extractTotal(ApiResponse $response): int
+    {
+        $data = $response->data ?? [];
+        
+        if (is_array($data) && isset($data['total'])) {
+            return (int) $data['total'];
+        } elseif (is_object($data) && property_exists($data, 'total')) {
+            return (int) $data->total;
+        }
+        
+        return 0;
     }
 }
