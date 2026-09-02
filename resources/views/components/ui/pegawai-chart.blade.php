@@ -3,8 +3,9 @@
     'title' => 'Statistik Pegawai',
     'colors' => ['#8B5CF6', '#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#EC4899', '#6366F1', '#14B8A6', '#F97316'],
     'type' => 'bar',
-    'height' => 360,
+    'height' => 340,
     'standalone' => true,
+    'showHeader' => true,
 ])
 
 @if(!empty($chartData['labels']) && count($chartData['data']) > 0)
@@ -60,7 +61,7 @@
 
             if ($type === 'bar') {
                 $dataset['borderRadius'] = 8;
-                $dataset['barThickness'] = 40;
+                $dataset['maxBarThickness'] = 32;
             }
 
             if ($isCircular) {
@@ -73,8 +74,8 @@
 
     @if($standalone)
     <section class="mb-8">
-    @endif
         <div class="bg-white rounded-[1.25rem] p-6 shadow-[0_8px_30px_rgb(0,0,0,0.04)]">
+            @if($showHeader)
             <div class="flex items-center justify-between mb-6">
                 <h2 class="text-xl font-semibold text-gray-900">
                     <i class="fa-solid {{ $icon }} text-[#4B00FF] mr-2"></i>
@@ -84,14 +85,31 @@
                     Total: {{ number_format($chartData['total'], 0, ',', '.') }} orang
                 </span>
             </div>
+            @endif
 
             <div class="relative" style="height: {{ $height }}px;">
                 <canvas id="{{ $chartId }}"></canvas>
             </div>
         </div>
-    @if($standalone)
     </section>
+    @else
+        @if($showHeader)
+        <div class="flex items-center justify-between mb-6">
+            <h2 class="text-lg font-bold text-gray-900">
+                <i class="fa-solid {{ $icon }} text-indigo-600 mr-2"></i>
+                {{ $title }}
+            </h2>
+            <span class="text-xs text-gray-500 font-medium">
+                Total: {{ number_format($chartData['total'], 0, ',', '.') }} orang
+            </span>
+        </div>
+        @endif
+
+        <div class="relative w-full" style="height: {{ $height }}px;">
+            <canvas id="{{ $chartId }}"></canvas>
+        </div>
     @endif
+
 
     @push('scripts')
         <script>
@@ -109,77 +127,27 @@
                         labels: labels,
                         datasets: [dataset]
                     },
-                    plugins: [{
-                        id: 'valueLabels',
-                        afterDatasetsDraw: function (chart) {
-                            const isCartesian = {{ $isCartesian ? 'true' : 'false' }};
-                            const isCircular = {{ $isCircular ? 'true' : 'false' }};
-                            const meta = chart.getDatasetMeta(0);
-                            if (!meta || !meta.data || !meta.data.length) return;
-
-                            const ctx2 = chart.ctx;
-                            ctx2.save();
-
-                            meta.data.forEach(function (element, index) {
-                                const value = dataset.data[index];
-                                if (value === 0 || value == null) return;
-
-                                if (isCartesian) {
-                                    ctx2.fillStyle = '#111827';
-                                    ctx2.font = '600 11px sans-serif';
-                                    ctx2.textAlign = 'center';
-                                    ctx2.textBaseline = 'bottom';
-                                    ctx2.fillText(value, element.x, element.y - 6);
-                                } else if (isCircular) {
-                                    const midAngle = (element.startAngle + element.endAngle) / 2;
-                                    const outerRadius = element.outerRadius || 0;
-                                    const startR = outerRadius + 8;
-                                    const endR = outerRadius + 30;
-
-                                    const x1 = element.x + Math.cos(midAngle) * startR;
-                                    const y1 = element.y + Math.sin(midAngle) * startR;
-                                    const x2 = element.x + Math.cos(midAngle) * endR;
-                                    const y2 = element.y + Math.sin(midAngle) * endR;
-
-                                    ctx2.strokeStyle = '#d1d5db';
-                                    ctx2.lineWidth = 1;
-                                    ctx2.beginPath();
-                                    ctx2.moveTo(x1, y1);
-                                    ctx2.lineTo(x2, y2);
-                                    ctx2.stroke();
-
-                                    ctx2.fillStyle = '#374151';
-                                    ctx2.font = '500 11px sans-serif';
-                                    ctx2.textAlign = midAngle > Math.PI / 2 && midAngle < Math.PI * 1.5 ? 'right' : 'left';
-                                    ctx2.textBaseline = 'middle';
-                                    ctx2.fillText(labels[index] + ': ' + value + ' %', x2 + (ctx2.textAlign === 'left' ? 4 : -4), y2);
-                                }
-                            });
-
-                            ctx2.restore();
-                        }
-                    }],
                     options: {
                         responsive: true,
                         maintainAspectRatio: false,
+                        cutout: '68%',
                         plugins: {
                             legend: {
                                 display: {{ $showLegend ? 'true' : 'false' }},
                                 position: 'bottom',
                                 labels: {
-                                    padding: 16,
+                                    padding: 12,
                                     usePointStyle: true,
                                     pointStyle: 'circle',
-                                    boxWidth: 8,
-                                    font: { size: 12 },
-                                    color: '#374151'
+                                    font: { size: 11, weight: '500' },
+                                    color: '#4b5563'
                                 }
                             },
                             tooltip: {
-                                backgroundColor: '#1f2937',
-                                titleFont: { size: 13, weight: '600' },
+                                backgroundColor: '#111827',
+                                titleFont: { size: 12, weight: '600' },
                                 bodyFont: { size: 12 },
-                                padding: 12,
+                                padding: 10,
                                 cornerRadius: 8,
                                 callbacks: {
                                     label: function (context) {
@@ -196,8 +164,7 @@
                             y: {
                                 beginAtZero: true,
                                 ticks: {
-                                    stepSize: 1,
-                                    font: { size: 12 },
+                                    font: { size: 11 },
                                     color: '#6b7280'
                                 },
                                 grid: {
@@ -208,7 +175,7 @@
                                 ticks: {
                                     font: { size: 11 },
                                     color: '#374151',
-                                    maxRotation: 45,
+                                    maxRotation: 0,
                                     minRotation: 0
                                 },
                                 grid: {
@@ -219,6 +186,7 @@
                         @endif
                     }
                 });
+
             });
         </script>
     @endpush

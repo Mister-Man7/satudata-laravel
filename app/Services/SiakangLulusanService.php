@@ -60,33 +60,105 @@ class SiakangLulusanService
 
     private function hasilKosong(): array
     {
-        $defaultFakultasLulus = [
-            ['nama_fakultas' => 'Fakultas Kedokteran dan Ilmu Kesehatan', 'jumlah_mahasiswa_lulus' => 288],
-            ['nama_fakultas' => 'Fakultas Pertanian', 'jumlah_mahasiswa_lulus' => 5114],
-            ['nama_fakultas' => 'Fakultas Hukum', 'jumlah_mahasiswa_lulus' => 5985],
-            ['nama_fakultas' => 'Fakultas Teknik', 'jumlah_mahasiswa_lulus' => 10895],
-            ['nama_fakultas' => 'Fakultas Ekonomi dan Bisnis', 'jumlah_mahasiswa_lulus' => 12321],
-            ['nama_fakultas' => 'Fakultas Ilmu Sosial dan Ilmu Politik', 'jumlah_mahasiswa_lulus' => 6031],
-            ['nama_fakultas' => 'Fakultas Keguruan dan Ilmu Pendidikan', 'jumlah_mahasiswa_lulus' => 17229],
-            ['nama_fakultas' => 'Pascasarjana', 'jumlah_mahasiswa_lulus' => 1534],
-        ];
+        try {
+            $prodiList = \Illuminate\Support\Facades\DB::table('prodis')->get();
+            $prodiMap = [];
+            foreach ($prodiList as $p) {
+                $prodiMap[$p->id] = [
+                    'nama_prodi' => $p->nama_prodi,
+                    'jenjang' => strtoupper($p->jenjang ?? 'S1'),
+                    'fakultas' => 'Fakultas UNTIRTA',
+                ];
+            }
 
-        $defaultProdiLulus = [
-            ['prodi_id' => '1', 'nama_prodi' => 'Informatika', 'jenjang' => 'S1', 'fakultas' => 'Fakultas Teknik', 'jumlah_mahasiswa_lulus' => 850],
-            ['prodi_id' => '2', 'nama_prodi' => 'Ilmu Hukum', 'jenjang' => 'S1', 'fakultas' => 'Fakultas Hukum', 'jumlah_mahasiswa_lulus' => 2100],
-            ['prodi_id' => '3', 'nama_prodi' => 'Manajemen', 'jenjang' => 'S1', 'fakultas' => 'Fakultas Ekonomi dan Bisnis', 'jumlah_mahasiswa_lulus' => 3200],
-            ['prodi_id' => '4', 'nama_prodi' => 'Pendidikan Bahasa Indonesia', 'jenjang' => 'S1', 'fakultas' => 'Fakultas Keguruan dan Ilmu Pendidikan', 'jumlah_mahasiswa_lulus' => 2400],
-        ];
+            $lulusans = \Illuminate\Support\Facades\DB::table('mahasiswas')
+                ->select('prodi_id')
+                ->whereNotNull('payload')
+                ->where(function ($q) {
+                    $q->where('payload', 'like', '%"tanggal_lulus": "2%')
+                      ->orWhere('payload', 'like', '%"no_ijazah": "%')
+                      ->orWhere('payload', 'like', '%"jenis_keluar_id": "%');
+                })
+                ->get();
 
-        $totalLulus = array_sum(array_column($defaultFakultasLulus, 'jumlah_mahasiswa_lulus'));
+            $fakultasCounts = [];
+            $prodiCounts = [];
 
-        return [
-            'tersedia' => true,
-            'total_mahasiswa_lulus' => $totalLulus,
-            'total' => $totalLulus,
-            'detail_per_fakultas' => $defaultFakultasLulus,
-            'detail_per_prodi' => $defaultProdiLulus,
-        ];
+            foreach ($lulusans as $m) {
+                $pInfo = $prodiMap[$m->prodi_id] ?? [
+                    'nama_prodi' => 'Program Studi Lainnya',
+                    'jenjang' => 'S1',
+                    'fakultas' => 'Fakultas UNTIRTA',
+                ];
+
+                $pName = $pInfo['nama_prodi'];
+                if (stripos($pName, 'Pendidikan') !== false || stripos($pName, 'FKIP') !== false) {
+                    $namaFak = 'Fakultas Keguruan dan Ilmu Pendidikan';
+                } elseif (stripos($pName, 'Teknik') !== false || stripos($pName, 'Informatika') !== false) {
+                    $namaFak = 'Fakultas Teknik';
+                } elseif (stripos($pName, 'Ekonomi') !== false || stripos($pName, 'Manajemen') !== false || stripos($pName, 'Akuntansi') !== false) {
+                    $namaFak = 'Fakultas Ekonomi dan Bisnis';
+                } elseif (stripos($pName, 'Hukum') !== false) {
+                    $namaFak = 'Fakultas Hukum';
+                } elseif (stripos($pName, 'Pertanian') !== false || stripos($pName, 'Pangan') !== false || stripos($pName, 'Perikanan') !== false) {
+                    $namaFak = 'Fakultas Pertanian';
+                } elseif (stripos($pName, 'Sosial') !== false || stripos($pName, 'Komunikasi') !== false || stripos($pName, 'Administrasi') !== false) {
+                    $namaFak = 'Fakultas Ilmu Sosial dan Ilmu Politik';
+                } elseif (stripos($pName, 'Kedokteran') !== false || stripos($pName, 'Keperawatan') !== false || stripos($pName, 'Gizi') !== false) {
+                    $namaFak = 'Fakultas Kedokteran dan Ilmu Kesehatan';
+                } else {
+                    $namaFak = 'Pascasarjana';
+                }
+
+                if (!isset($fakultasCounts[$namaFak])) {
+                    $fakultasCounts[$namaFak] = 0;
+                }
+                $fakultasCounts[$namaFak]++;
+
+                if (!isset($prodiCounts[$pName])) {
+                    $prodiCounts[$pName] = [
+                        'prodi_id' => $m->prodi_id,
+                        'nama_prodi' => $pName,
+                        'jenjang' => $pInfo['jenjang'],
+                        'fakultas' => $namaFak,
+                        'jumlah_mahasiswa_lulus' => 0,
+                    ];
+                }
+                $prodiCounts[$pName]['jumlah_mahasiswa_lulus']++;
+            }
+
+            $detailFakultas = [];
+            foreach ($fakultasCounts as $namaFak => $count) {
+                $detailFakultas[] = [
+                    'nama_fakultas' => $namaFak,
+                    'jumlah_mahasiswa_lulus' => $count,
+                ];
+            }
+
+            $detailProdi = [];
+            foreach ($prodiCounts as $pData) {
+                $detailProdi[] = $pData;
+            }
+
+            $totalLulus = array_sum(array_column($detailFakultas, 'jumlah_mahasiswa_lulus'));
+
+            return [
+                'tersedia' => true,
+                'total_mahasiswa_lulus' => $totalLulus,
+                'total' => $totalLulus,
+                'detail_per_fakultas' => $detailFakultas,
+                'detail_per_prodi' => array_values($detailProdi),
+            ];
+        } catch (\Throwable $e) {
+            return [
+                'tersedia' => true,
+                'total_mahasiswa_lulus' => 0,
+                'total' => 0,
+                'detail_per_fakultas' => [],
+                'detail_per_prodi' => [],
+            ];
+        }
     }
+
 }
 
