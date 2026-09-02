@@ -27,10 +27,13 @@ class MahasiswaLulusTable extends Component
     #[Url(except: '')]
     public string $tahun_lulus = '';
 
+    public ?string $toastMessage = null;
+
     public function terapkanFilter(): void
     {
         $this->validate();
         $this->resetPage();
+        $this->toastMessage = 'Berhasil menerapkan filter pencarian mahasiswa lulus';
     }
 
     public function resetFilter(): void
@@ -38,7 +41,9 @@ class MahasiswaLulusTable extends Component
         $this->reset('search', 'kode_prodi', 'angkatan', 'tahun_lulus');
         $this->resetPage();
         $this->resetValidation();
+        $this->toastMessage = 'Berhasil mereset filter pencarian';
     }
+
 
     public function render(SiakangLulusanService $lulusanService): View
     {

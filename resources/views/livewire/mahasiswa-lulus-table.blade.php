@@ -44,9 +44,24 @@
             <button type="button" wire:click="resetFilter"
                 class="rounded-xl border border-gray-200 bg-white px-5 py-3 text-sm font-bold text-gray-700 hover:text-blue-600">
                 Reset
-            </button>
         </div>
     </form>
+
+    @if ($toastMessage)
+        <div x-data="{ show: true }" x-init="setTimeout(() => show = false, 4000)" x-show="show" x-transition:leave="transition ease-in duration-200 opacity-0 scale-95"
+            class="mb-6 flex items-center justify-between rounded-2xl border border-emerald-200 bg-emerald-50 px-5 py-4 text-emerald-950 shadow-sm">
+            <div class="flex items-center gap-3">
+                <div class="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-emerald-600 text-white">
+                    <i class="fa-solid fa-circle-check text-sm"></i>
+                </div>
+                <span class="text-sm font-bold">{{ $toastMessage }}</span>
+            </div>
+            <button @click="show = false" class="text-emerald-600 hover:text-emerald-800">
+                <i class="fa-solid fa-xmark text-base"></i>
+            </button>
+        </div>
+    @endif
+
 
     <div wire:loading.delay
         class="mb-6 rounded-2xl border border-blue-100 bg-blue-50 p-4 text-sm font-semibold text-blue-700">
