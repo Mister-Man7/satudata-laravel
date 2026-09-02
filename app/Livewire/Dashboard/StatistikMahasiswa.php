@@ -155,23 +155,14 @@ class StatistikMahasiswa extends Component
         $this->dispatch('statistik-mahasiswa-filter-changed');
     }
 
-    private function buildSummaryCards(array $responseAktif, array $responseLulusan): array
+    private function buildSummaryCards(array $dataAktif, array $dataLulusan): array
     {
-<<<<<<< HEAD:app/Livewire/Dashboard/StatistikMahasiswa.php
-        $totalAktif = (!empty($responseAktif['tersedia']) && !empty($responseAktif['total_mahasiswa_aktif'])) ? (int)$responseAktif['total_mahasiswa_aktif'] : 0;
+        $totalAktif = (int)($dataAktif['total_mahasiswa_aktif'] ?? $dataAktif['total_mahasiswa'] ?? $dataAktif['total'] ?? 0);
 
-        $totalLulusan = (!empty($responseLulusan['tersedia']) && !empty($responseLulusan['total'])) ? (int)$responseLulusan['total'] : 0;
-=======
-        $totalAktif = (($responseAktif['status'] ?? false) || ($responseAktif['tersedia'] ?? false))
-            ? (int)($responseAktif['total_mahasiswa'] ?? $responseAktif['total_mahasiswa_aktif'] ?? $responseAktif['total'] ?? 0)
-            : 0;
-
-        $totalLulusan = (($responseLulusan['status'] ?? false) || ($responseLulusan['tersedia'] ?? false))
-            ? (int)($responseLulusan['total_mahasiswa_lulus'] ?? $responseLulusan['total'] ?? 0)
-            : 0;
->>>>>>> c0b825d (fix: API Siakang at Akademik):app/View/Components/Dashboard/StatistikMahasiswa.php
+        $totalLulusan = (int)($dataLulusan['total_mahasiswa_lulus'] ?? $dataLulusan['total'] ?? 0);
 
         $totalMahasiswa = $totalAktif + $totalLulusan;
+
 
 
         return [

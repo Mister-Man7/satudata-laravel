@@ -103,58 +103,52 @@ class AkademikController extends Controller
         $detailFakultasAktif = [];
         $prodiAktifList = [];
 
-        if ($responseAktif->success) {
+        if (is_array($responseAktif)) {
+            $totalAktifSekarang = $responseAktif['total_mahasiswa'] ?? $responseAktif['total_mahasiswa_aktif'] ?? $responseAktif['total'] ?? 0;
+            $detailFakultasAktif = $responseAktif['detail_per_fakultas'] ?? [];
+            $prodiAktifList = $responseAktif['detail_per_prodi'] ?? [];
+        } elseif (is_object($responseAktif) && isset($responseAktif->success) && $responseAktif->success) {
             $dataAktif = is_array($responseAktif->data) ? $responseAktif->data : [];
             $totalAktifSekarang = $dataAktif['total_mahasiswa_aktif'] ?? $dataAktif['total'] ?? 0;
             $detailFakultasAktif = $dataAktif['detail_per_fakultas'] ?? [];
             $prodiAktifList = $dataAktif['detail_per_prodi'] ?? [];
         } else {
-            Log::warning('Gagal mengambil data mahasiswa aktif', ['message' => $responseAktif->message]);
+            Log::warning('Gagal mengambil data mahasiswa aktif');
         }
 
         $totalLulusanSekarang = 0;
         $detailFakultasLulus = [];
         $prodiLulusList = [];
 
-<<<<<<< HEAD:app/Http/Controllers/Academic/AkademikController.php
-        if ($responseLulusan->success) {
+        if (is_array($responseLulusan)) {
+            $totalLulusanSekarang = $responseLulusan['total_mahasiswa_lulus'] ?? $responseLulusan['total'] ?? 0;
+            $detailFakultasLulus = $responseLulusan['detail_per_fakultas'] ?? [];
+            $prodiLulusList = $responseLulusan['detail_per_prodi'] ?? [];
+        } elseif (is_object($responseLulusan) && isset($responseLulusan->success) && $responseLulusan->success) {
             $dataLulusan = is_array($responseLulusan->data) ? $responseLulusan->data : [];
             $totalLulusanSekarang = $dataLulusan['total_mahasiswa_lulus'] ?? 0;
             $detailFakultasLulus = $dataLulusan['detail_per_fakultas'] ?? [];
             $prodiLulusList = $dataLulusan['detail_per_prodi'] ?? [];
         } else {
-            Log::warning('Gagal mengambil data mahasiswa lulus', ['message' => $responseLulusan->message]);
+            Log::warning('Gagal mengambil data mahasiswa lulus');
         }
 
         $totalLulusanLalu = 0;
-        if ($responseLulusanLalu->success) {
+        if (is_array($responseLulusanLalu)) {
+            $totalLulusanLalu = $responseLulusanLalu['total_mahasiswa_lulus'] ?? $responseLulusanLalu['total'] ?? 0;
+        } elseif (is_object($responseLulusanLalu) && isset($responseLulusanLalu->success) && $responseLulusanLalu->success) {
             $dataLulusanLalu = is_array($responseLulusanLalu->data) ? $responseLulusanLalu->data : [];
             $totalLulusanLalu = $dataLulusanLalu['total_mahasiswa_lulus'] ?? 0;
         }
 
-        $totalBaruSekarang = $this->totalMahasiswaBaru($kodeSemesterTampil);
-        $totalBaruLalu = $this->totalMahasiswaBaru($kodeSemesterPembanding);
-=======
-        if (isset($responseLulusan['tersedia']) && $responseLulusan['tersedia'] === true) {
-            $totalLulusanSekarang = $responseLulusan['total_mahasiswa_lulus'] ?? $responseLulusan['total'] ?? 0;
-            $detailFakultasLulus = $responseLulusan['detail_per_fakultas'] ?? [];
-            $prodiLulusList = $responseLulusan['detail_per_prodi'] ?? [];
-        }
-
-        $totalLulusanLalu = 0;
-        if (isset($responseLulusanLalu['tersedia']) && $responseLulusanLalu['tersedia'] === true) {
-            $totalLulusanLalu = $responseLulusanLalu['total_mahasiswa_lulus'] ?? $responseLulusanLalu['total'] ?? 0;
-        }
-
         try {
-            $totalBaruSekarang = Mahasiswa::where('angkatan', $tahunAktif)->count();
-            $totalBaruLalu = Mahasiswa::where('angkatan', $tahunLalu)->count();
+            $totalBaruSekarang = $this->totalMahasiswaBaru($kodeSemesterTampil);
+            $totalBaruLalu = $this->totalMahasiswaBaru($kodeSemesterPembanding);
         } catch (\Throwable $e) {
             $totalBaruSekarang = 4250;
             $totalBaruLalu = 4100;
         }
 
->>>>>>> c0b825d (fix: API Siakang at Akademik):app/Http/Controllers/AkademikController.php
 
         $totalTidakAktifSekarang = 0;
         $totalTidakAktifLalu = 0;
