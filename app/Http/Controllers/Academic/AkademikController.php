@@ -87,17 +87,15 @@ class AkademikController extends Controller
         $tipeSemesterTampil = substr($kodeSemesterTampil, -1) == '1' ? 'Ganjil' : 'Genap';
         $kodeSemesterTampilString = $tipeSemesterTampil . ' ' . substr($kodeSemesterTampil, 0, 4);
 
-        // Semester pembanding untuk perhitungan trend: semester yang sama di tahun
-        // sebelumnya (mis. 20251 dibandingkan dengan 20241). Intake mahasiswa
-        // terjadi sekali per tahun akademik, jadi perbandingan ini lebih adil
-        // daripada membandingkan semester urutan sebelumnya (mis. 20251 vs 20242)
-        // yang mencampur fase ganjil/genap yang volumenya tidak sebanding.
-        $kodeSemesterPembanding = $this->semesterTahunSebelumnya($kodeSemesterTampil);
+        // Semester pembanding untuk perhitungan trend: semester urutan sebelumnya
+        // (mis. 20252 dibandingkan dengan 20251, atau 20251 dengan 20242).
+        $kodeSemesterPembanding = $this->semesterSebelumnya($kodeSemesterTampil);
         $responseLulusanLalu = $this->lulusanService->getData(['semester' => $kodeSemesterPembanding]);
         $responseAktifLalu = $this->aktifService->getData(['semester' => $kodeSemesterPembanding]);
         $totalAktifLalu = $responseAktifLalu->success && is_array($responseAktifLalu->data)
             ? (int) ($responseAktifLalu->data['total_mahasiswa_aktif'] ?? 0)
             : 0;
+
 
         $totalAktifSekarang = 0;
         $detailFakultasAktif = [];
@@ -141,14 +139,21 @@ class AkademikController extends Controller
             $totalLulusanLalu = $dataLulusanLalu['total_mahasiswa_lulus'] ?? 0;
         }
 
+        $kodeSemesterPembanding = $this->semesterSebelumnya($kodeSemesterTampil);
+        $tipePembanding = substr($kodeSemesterPembanding, -1) == '1' ? 'Ganjil' : 'Genap';
+        $kodeSemesterPembandingString = $tipePembanding . ' ' . substr($kodeSemesterPembanding, 0, 4);
+
+        $kodeSemesterPembandingBaru = $this->semesterTahunSebelumnya($kodeSemesterTampil);
+        $tipePembandingBaru = substr($kodeSemesterPembandingBaru, -1) == '1' ? 'Ganjil' : 'Genap';
+        $kodeSemesterPembandingBaruString = $tipePembandingBaru . ' ' . substr($kodeSemesterPembandingBaru, 0, 4);
+
         try {
             $totalBaruSekarang = $this->totalMahasiswaBaru($kodeSemesterTampil);
-            $totalBaruLalu = $this->totalMahasiswaBaru($kodeSemesterPembanding);
+            $totalBaruLalu = $this->totalMahasiswaBaru($kodeSemesterPembandingBaru);
         } catch (\Throwable $e) {
             $totalBaruSekarang = 4250;
             $totalBaruLalu = 4100;
         }
-
 
         $totalTidakAktifSekarang = 0;
         $totalTidakAktifLalu = 0;
@@ -165,7 +170,7 @@ class AkademikController extends Controller
                 'iconClass' => 'fa-regular fa-user',
                 'badgeText' => $trendAktif['text'],
                 'badgeColor' => $trendAktif['color'],
-                'footerText' => "Semester $kodeSemesterTampilString",
+                'footerText' => "vs Sem. {$kodeSemesterPembandingString}",
                 'href' => null,
             ],
             [
@@ -174,7 +179,7 @@ class AkademikController extends Controller
                 'iconClass' => 'fa-regular fa-clock',
                 'badgeText' => $trendTidakAktif['text'],
                 'badgeColor' => $trendTidakAktif['color'],
-                'footerText' => 'Tahun Sebelumnya',
+                'footerText' => "vs Sem. {$kodeSemesterPembandingString}",
                 'href' => null,
             ],
             [
@@ -183,7 +188,7 @@ class AkademikController extends Controller
                 'iconClass' => 'fa-solid fa-arrow-up-right-from-square',
                 'badgeText' => $trendLulusan['text'],
                 'badgeColor' => $trendLulusan['color'],
-                'footerText' => 'Semester ' . $kodeSemesterTampilString,
+                'footerText' => "vs Sem. {$kodeSemesterPembandingString}",
                 'href' => route('akademik.mahasiswa-lulus'),
             ],
             [
@@ -192,10 +197,12 @@ class AkademikController extends Controller
                 'iconClass' => 'fa-regular fa-heart',
                 'badgeText' => $trendBaru['text'],
                 'badgeColor' => $trendBaru['color'],
-                'footerText' => 'Semester ' . $kodeSemesterTampilString,
+                'footerText' => "vs Sem. {$kodeSemesterPembandingBaruString}",
                 'href' => null,
             ],
         ];
+
+
 
         $fakultasAktifMap = collect($detailFakultasAktif)->keyBy(function ($item) {
             return strtolower(trim($item['nama_fakultas'] ?? ''));

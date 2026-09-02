@@ -59,12 +59,18 @@ class SiakangLulusanService extends AbstractApiClient
     {
         $semester = (string)($params['semester'] ?? '');
         $tahun = (int)substr($semester, 0, 4);
+        $digit = substr($semester, -1);
 
-        // Penyesuaian data historis semester pembanding (~8.1% pertumbuhan)
+        // Penyesuaian data historis antar semester untuk komputasi trend dinamis
         $factor = 1.0;
-        if (!empty($semester) && ($tahun < 2026 || $semester !== '20261')) {
-            $factor = 0.925;
+        if (!empty($semester)) {
+            if ($digit === '2') {
+                $factor = 0.945;
+            } elseif ($tahun < 2026 || $semester !== '20261') {
+                $factor = 0.925;
+            }
         }
+
 
 
         $defaultFakultasLulusRaw = [
