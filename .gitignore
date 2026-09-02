@@ -5,6 +5,7 @@
 .env.production
 .phpactor.json
 .phpunit.result.cache
+<<<<<<< HEAD
 /.ai
 /.codex
 /.cursor/
@@ -14,8 +15,19 @@
 /.phpunit.cache
 /.vscode
 /.zed
+=======
+/.ai/
+/.codex/
+/.cursor/
+/.idea/
+/.junie/
+/.nova/
+/.phpunit.cache/
+/.vscode/
+/.zed/
+>>>>>>> c0b825d (fix: API Siakang at Akademik)
 /auth.json
-/node_modules
+/node_modules/
 /public/build
 /public/fonts-manifest.dev.json
 /public/hot
