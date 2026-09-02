@@ -140,20 +140,26 @@ class StatistikMahasiswa extends Component
         ]);
     }
 
+    public ?string $toastMessage = null;
+
     public function updatedSelectedYear(): void
     {
+        $this->toastMessage = "Berhasil mengganti tahun akademik ke {$this->selectedYear}";
         $this->dispatch('statistik-mahasiswa-filter-changed');
     }
 
     public function updatedSelectedSemester(): void
     {
+        $this->toastMessage = "Berhasil mengganti semester ke {$this->selectedSemester}";
         $this->dispatch('statistik-mahasiswa-filter-changed');
     }
 
     public function updatedSelectedFaculty(): void
     {
+        $this->toastMessage = "Berhasil memfilter fakultas: {$this->selectedFaculty}";
         $this->dispatch('statistik-mahasiswa-filter-changed');
     }
+
 
     private function buildSummaryCards(array $dataAktif, array $dataLulusan): array
     {

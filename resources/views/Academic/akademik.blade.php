@@ -19,10 +19,11 @@
             <div class="relative inline-block" x-data="{ open: false }">
                 <button @click="open = !open" @keydown.escape="open = false"
                     class="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-colors cursor-pointer">
-                    <svg class="h-4 w-4" :class="{ 'rotate-180': open }" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                    <i class="fa-solid fa-filter text-xs text-blue-200"></i>
+                    <span>Semester: <strong>{{ $labelSemesterAktif }}</strong></span>
+                    <svg class="h-4 w-4 transition-transform duration-200" :class="{ 'rotate-180': open }" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
                     </svg>
-                    Ganti Semester
                 </button>
                 <div x-show="open" @click.outside="open = false" x-cloak
                     x-transition:enter="transition ease-out duration-100"
@@ -51,6 +52,29 @@
                 </div>
             </div>
         </div>
+
+        @if (request()->has('semester') && isset($daftarSemester[request('semester')]))
+            <div x-data="{ show: true }" x-show="show" x-transition:leave="transition ease-in duration-200 opacity-0 scale-95"
+                class="mb-5 flex items-center justify-between rounded-xl border border-emerald-200 bg-emerald-50/90 px-4 py-3.5 text-emerald-900 shadow-sm backdrop-blur">
+                <div class="flex items-center gap-3">
+                    <div class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-emerald-600 text-white shadow-sm">
+                        <i class="fa-solid fa-circle-check text-base"></i>
+                    </div>
+                    <div>
+                        <p class="text-sm font-bold text-emerald-950">
+                            Berhasil mengganti semester ke {{ $labelSemesterAktif }}
+                        </p>
+                        <p class="text-xs text-emerald-700 mt-0.5">
+                            Data ringkasan dan statistik di bawah ini telah diperbarui sesuai periode {{ $labelSemesterAktif }}.
+                        </p>
+                    </div>
+                </div>
+                <button @click="show = false" class="rounded-lg p-1.5 text-emerald-600 hover:bg-emerald-100 hover:text-emerald-800 transition-colors">
+                    <i class="fa-solid fa-xmark text-lg"></i>
+                </button>
+            </div>
+        @endif
+
 
         <div class="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
             @forelse ($daftarStatistik as $data)

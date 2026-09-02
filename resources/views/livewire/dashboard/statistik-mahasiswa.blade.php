@@ -40,6 +40,19 @@
     <div wire:loading.class="hidden" wire:target="loadData" class="hidden">
         <div class="rounded-xl bg-white p-5 shadow-sm ring-1 ring-slate-200/70 sm:p-6 lg:p-8" data-statistik-mahasiswa-root data-payload='@json($chartPayload)'>
             <div class="grid grid-cols-12 gap-6">
+                @if ($toastMessage)
+                    <div x-data="{ show: true }" x-init="setTimeout(() => show = false, 4000)" x-show="show" x-transition:leave="transition ease-in duration-200 opacity-0 scale-95"
+                        class="col-span-12 flex items-center justify-between rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-emerald-950 shadow-sm">
+                        <div class="flex items-center gap-2.5">
+                            <i class="fa-solid fa-circle-check text-emerald-600 text-base"></i>
+                            <span class="text-xs font-bold sm:text-sm">{{ $toastMessage }}</span>
+                        </div>
+                        <button @click="show = false" class="text-emerald-500 hover:text-emerald-700">
+                            <i class="fa-solid fa-xmark text-base"></i>
+                        </button>
+                    </div>
+                @endif
+
                 <div class="col-span-12 flex flex-col gap-3 lg:col-span-7 lg:justify-center">
                     <div>
                         <h2 class="text-2xl font-extrabold tracking-tight text-slate-900 sm:text-3xl">
