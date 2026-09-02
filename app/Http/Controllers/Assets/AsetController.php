@@ -34,14 +34,20 @@ class AsetController extends Controller
         }
 
         $datas = collect($kampusList)->map(function ($kampus) {
+            $totalStr = isset($kampus['total_aset']) && $kampus['total_aset'] > 0
+                ? number_format($kampus['total_aset'], 0, ',', '.') . ' Unit Aset'
+                : 'Lihat detail';
+
             return [
                 'id' => $kampus['id_kampus'],
                 'title' => $kampus['nama_kampus'],
-                'count' => 'Lihat detail',
+                'count' => $totalStr,
+                'total_aset' => $kampus['total_aset'] ?? 0,
                 'icon' => 'building',
                 'updated' => $kampus['updated_at'] ?? now(),
             ];
         });
+
 
         return view('Assets.aset', compact('datas', 'warning', 'statusInfo'), [
             'title' => 'Aset',
@@ -85,115 +91,67 @@ class AsetController extends Controller
     protected function getStatusBarangInfo()
     {
         try {
-            // Cek cache dulu
             $cached = \Cache::get('aset_status_summary');
             if ($cached !== null) {
                 return $cached;
             }
 
-            // Jika tidak ada cache, fetch semua data
-            $allBmn = [];
-            $page = 1;
-            $perPage = 100;
-            $maxPages = 50; // Max 50 halaman = 5000 item
+            if (class_exists(\Illuminate\Support\Facades\DB::class) && \Illuminate\Support\Facades\Schema::hasTable('asets')) {
+                $total = \Illuminate\Support\Facades\DB::table('asets')->count();
+                $rusakBerat = \Illuminate\Support\Facades\DB::table('asets')->where(function($q) {
+                    $q->where('kondisi_text', 'Rusak Berat')->orWhere('kondisi', 3);
+                })->count();
+                $rusakRingan = \Illuminate\Support\Facades\DB::table('asets')->where(function($q) {
+                    $q->where('kondisi_text', 'Rusak Ringan')->orWhere('kondisi', 2);
+                })->count();
+                $baik = \Illuminate\Support\Facades\DB::table('asets')->where(function($q) {
+                    $q->where('kondisi_text', 'Baik')->orWhere('kondisi', 1);
+                })->count();
+                $lainnya = max(0, $total - ($baik + $rusakRingan + $rusakBerat));
 
-            while ($page <= $maxPages) {
-                $response = $this->apiService->makeRequest('GET', 'bmn-all', [
-                    'per_page' => $perPage,
-                    'page' => $page,
-                ]);
+                if ($total > 0) {
+                    if ($rusakRingan === 0 && $rusakBerat === 0 && $lainnya === 0) {
+                        $result = [
+                            'type' => 'success',
+                            'message' => "Seluruh inventaris dalam kondisi baik (" . number_format($total, 0, ',', '.') . " unit)",
+                            'total' => $total,
+                        ];
+                    } elseif ($rusakBerat > 0) {
+                        $message = "Ditemukan " . number_format($rusakBerat, 0, ',', '.') . " unit dalam kondisi rusak berat";
+                        if ($rusakRingan > 0) {
+                            $message .= " dan " . number_format($rusakRingan, 0, ',', '.') . " unit rusak ringan";
+                        }
+                        $message .= " dari total " . number_format($total, 0, ',', '.') . " unit inventaris BMN";
+                        $result = [
+                            'type' => 'error',
+                            'message' => $message,
+                            'total' => $total,
+                        ];
+                    } elseif ($rusakRingan > 0) {
+                        $result = [
+                            'type' => 'warning',
+                            'message' => "Terdapat " . number_format($rusakRingan, 0, ',', '.') . " unit inventaris dengan kondisi rusak ringan dari total " . number_format($total, 0, ',', '.') . " unit",
+                            'total' => $total,
+                        ];
+                    } else {
+                        $result = [
+                            'type' => 'info',
+                            'message' => "Total " . number_format($total, 0, ',', '.') . " unit inventaris tercatat dalam sistem",
+                            'total' => $total,
+                        ];
+                    }
 
-                if ($response === null) {
-                    break;
+                    \Cache::put('aset_status_summary', $result, now()->addHours(1));
+                    return $result;
                 }
-
-                $pageData = $response['data']['data'] ?? $response['data'] ?? [];
-
-                if (!is_array($pageData)) {
-                    $pageData = (array) $pageData;
-                }
-
-                $pageCount = count($pageData);
-
-                if ($pageCount === 0) {
-                    break;
-                }
-
-                $allBmn = array_merge($allBmn, $pageData);
-
-                if ($pageCount < $perPage) {
-                    break;
-                }
-
-                $page++;
             }
-
-            $total = count($allBmn);
-
-            if ($total === 0) {
-                return null;
-            }
-
-            // Hitung kondisi barang
-            $baik = 0;
-            $rusakRingan = 0;
-            $rusakBerat = 0;
-            $lainnya = 0;
-
-            foreach ($allBmn as $item) {
-                $kondisi = $this->normalizeKondisi($item);
-                match ($kondisi) {
-                    'baik' => $baik++,
-                    'rusak ringan' => $rusakRingan++,
-                    'rusak berat' => $rusakBerat++,
-                    default => $lainnya++,
-                };
-            }
-
-            \Log::info('Status Barang Summary', compact('total', 'baik', 'rusakRingan', 'rusakBerat', 'lainnya'));
-
-            // Tentukan type dan message berdasarkan kondisi terparah
-            if ($rusakRingan === 0 && $rusakBerat === 0 && $lainnya === 0) {
-                $result = [
-                    'type' => 'success',
-                    'message' => "Seluruh inventaris dalam kondisi baik ({$total} unit)",
-                    'total' => $total,
-                ];
-            } elseif ($rusakBerat > 0) {
-                $message = "Ditemukan {$rusakBerat} unit dalam kondisi rusak berat";
-                if ($rusakRingan > 0) {
-                    $message .= " dan {$rusakRingan} unit rusak ringan";
-                }
-                $message .= " dari total {$total} unit inventaris";
-                $result = [
-                    'type' => 'error',
-                    'message' => $message,
-                    'total' => $total,
-                ];
-            } elseif ($rusakRingan > 0) {
-                $result = [
-                    'type' => 'warning',
-                    'message' => "Terdapat {$rusakRingan} unit inventaris dengan kondisi rusak ringan dari total {$total} unit",
-                    'total' => $total,
-                ];
-            } else {
-                $result = [
-                    'type' => 'info',
-                    'message' => "Total {$total} unit inventaris tercatat dalam sistem",
-                    'total' => $total,
-                ];
-            }
-
-            // Cache hasil selama 1 jam
-            \Cache::put('aset_status_summary', $result, now()->addHours(1));
-
-            return $result;
-
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
             \Log::error('getStatusBarangInfo error', ['message' => $e->getMessage()]);
-            return null;
         }
+
+        return null;
     }
+
 
     public function kampusById($id)
     {
@@ -271,13 +229,19 @@ class AsetController extends Controller
         }
 
         $datas = collect($gedungList)->map(function ($gedung) {
+            $totalStr = isset($gedung['total_aset']) && $gedung['total_aset'] > 0
+                ? number_format($gedung['total_aset'], 0, ',', '.') . ' Unit BMN'
+                : 'Lihat Ruangan';
+
             return [
                 'id' => $gedung['id_gedung'] ?? $gedung['id'],
                 'title' => $gedung['nama_gedung'] ?? 'Nama Gedung Tidak Diketahui',
+                'count' => $totalStr,
                 'icon' => 'map',
                 'updated' => $gedung['updated_at'] ?? now(),
             ];
         });
+
 
         return view('Assets.aset', compact('datas'), [
             'title' => 'Gedung - ' . ($dataKampus['nama_kampus'] ?? 'Daftar Gedung'),
