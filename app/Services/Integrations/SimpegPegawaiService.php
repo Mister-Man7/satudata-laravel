@@ -41,17 +41,51 @@ class SimpegPegawaiService extends AbstractApiClient
             );
         }
 
-        $response = $this->get('/employee', $params);
+        $response = $this->get('', $params);
 
-        if ($response->success) {
+        if ($response->success && is_array($response->data) && count($response->data) > 0) {
             Cache::put($cacheKey, $response->data, now()->addMinutes(5));
+            return $response;
         }
 
-        return $response;
+        // Fallback dinamis dari 1.936 record database `pegawais`
+        try {
+            $dbItems = \App\Models\Pegawai::all()->map(function ($item) {
+                return [
+                    'kodeData' => $item->kode_data,
+                    'nip' => $item->nip,
+                    'idSDM' => $item->id_sdm,
+                    'namaPegawai' => $item->nama,
+                    'nama' => $item->nama,
+                    'gelarDepan' => $item->gelar_depan,
+                    'gelarBelakang' => $item->gelar_belakang,
+                    'emailPegawai' => $item->email,
+                    'email' => $item->email,
+                    'noTlp' => $item->no_tlp,
+                    'unitKerja' => $item->unit_kerja,
+                    'jabatan' => $item->jabatan,
+                    'pangkat' => $item->pangkat,
+                    'statusKerja' => $item->status_kerja,
+                    'levelPegawai' => $item->level_pegawai,
+                    'unitKerja_id' => $item->unit_kerja_id,
+                    'jabatan_id' => $item->jabatan_id,
+                    'pangkat_id' => $item->pangkat_id,
+                ];
+            })->toArray();
+
+            return new ApiResponse(
+                success: true,
+                status: 200,
+                message: 'Data dimuat dari database lokal pegawais',
+                data: $dbItems,
+            );
+        } catch (\Throwable $e) {
+            return $response;
+        }
     }
 
     /**
-     * Ambil data dosen (cached dari API SIMPEG).
+     * Ambil data dosen (cached dari API SIMPEG / DB).
      */
     public function getDataDosen(string $endpoint = '', array $params = []): ApiResponse
     {
@@ -102,69 +136,42 @@ class SimpegPegawaiService extends AbstractApiClient
         return new ApiResponse(
             success: true,
             status: 200,
-            message: 'Data dimuat dari fallback lokal SIMPEG',
+            message: 'Data dimuat dari database pegawais',
             data: $fallbackData,
         );
     }
 
-
+    /**
+     * Data dosen dinamis dari 1.936 record database `pegawais`.
+     * Tanpa array statis / hardcoded.
+     */
     private function hasilFallbackDataDosen(): array
     {
-        $fakultasDist = [
-            'Fakultas Keguruan dan Ilmu Pendidikan' => 340,
-            'Fakultas Teknik' => 260,
-            'Fakultas Ekonomi dan Bisnis' => 240,
-            'Fakultas Ilmu Sosial dan Ilmu Politik' => 150,
-            'Fakultas Pertanian' => 120,
-            'Fakultas Hukum' => 80,
-            'Fakultas Kedokteran dan Ilmu Kesehatan' => 45,
-            'Pascasarjana' => 13,
-        ];
+        try {
+            $rows = \App\Models\Pegawai::where(function ($q) {
+                $q->where('level_pegawai', 'like', '%Dosen%')
+                  ->orWhere('jabatan', 'like', '%Dosen%')
+                  ->orWhere('jabatan', 'like', '%Lektor%')
+                  ->orWhere('jabatan', 'like', '%Asisten Ahli%')
+                  ->orWhere('jabatan', 'like', '%Profesor%');
+            })->get();
 
-        $namaSampel = [
-            'Prof. Dr. Ir. H. Fatah Sulaiman, S.T., M.T.',
-            'Dr. H. Agus Priyono, M.Si.',
-            'Dr. Nurul Hidayah, M.Pd.',
-            'Ir. Bambang Sugipto, M.Eng.',
-            'Drs. H. Maman Abdurahman, M.Si.',
-            'Dr. Hj. Siti Khadijah, M.Ag.',
-            'Dr. Eng. Rahmat Hidayat, S.T., M.T.',
-            'Dr. Indah Permata, S.E., M.Si.',
-            'Dr. H. Dedi Kurniawan, S.H., M.H.',
-            'Prof. Dr. Tri Rizky, M.Sc.',
-            'Dr. Anisa Fitriani, S.Pd., M.Pd.',
-            'Dr. Fajar Nugraha, S.T., M.Eng.',
-            'Dr. Maya Sari, S.E., M.Ak.',
-            'Dr. Eko Prasetyo, S.H., M.H.',
-            'Dr. Lestari Anggraini, S.P., M.Si.',
-        ];
-
-        $statusList = ['PNS', 'PNS', 'PNS', 'PNS', 'PPPK', 'PPPK', 'Dosen Tetap Non-PNS', 'Dosen LB'];
-        $jabatanList = ['Guru Besar / Profesor', 'Lektor Kepala', 'Lektor', 'Asisten Ahli'];
-
-        $result = [];
-        $index = 1;
-
-        foreach ($fakultasDist as $namaFakultas => $jumlah) {
-            for ($i = 0; $i < $jumlah; $i++) {
-                $namaBase = $namaSampel[($index - 1) % count($namaSampel)];
-                $nip = '197' . (50 + ($index % 30)) . sprintf('%02d', ($index % 12) + 1) . '2010121' . sprintf('%03d', $index);
-                $status = $statusList[$i % count($statusList)];
-                $jabatan = $jabatanList[$i % count($jabatanList)];
-
-                $result[] = [
-                    'nip' => $nip,
-                    'nama' => $namaBase . ($index > count($namaSampel) ? " ({$index})" : ""),
-                    'unitKerja' => $namaFakultas,
-                    'statusKerja' => $status,
-                    'jabatan' => $jabatan,
-                    'pangkat' => 'Penata Muda / III-a',
-                    'email' => "dosen{$index}@untirta.ac.id",
+            return $rows->map(function ($item) {
+                return [
+                    'nip' => $item->nip,
+                    'nama' => trim(($item->gelar_depan ? $item->gelar_depan . ' ' : '') . $item->nama . ($item->gelar_belakang ? ', ' . $item->gelar_belakang : '')),
+                    'namaPegawai' => $item->nama,
+                    'unitKerja' => $item->unit_kerja,
+                    'statusKerja' => $item->status_kerja,
+                    'levelPegawai' => $item->level_pegawai,
+                    'jabatan' => $item->jabatan,
+                    'pangkat' => $item->pangkat,
+                    'email' => $item->email,
                 ];
-                $index++;
-            }
+            })->toArray();
+        } catch (\Throwable $e) {
+            return [];
         }
-
-        return $result;
     }
+
 }

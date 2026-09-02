@@ -26,18 +26,76 @@ class PegawaiController extends Controller
 
     public function index(Request $request): View
     {
-        $statusPegawai = $this->buildStatusCards();
-        $datas = $this->buildWorkStatusCards();
-        $levelPegawai = $this->buildLevelCards();
-        $guruBesarResponse = $this->getQuickCount(['jabatan' => 44]);
-        $guruBesar = $this->extractTotal($guruBesarResponse);
+        $response = $this->pegawaiService->getData();
+        $allPegawai = collect($response->data ?? []);
+
+        $statusPegawai = $this->buildStatusCards($allPegawai);
+        $datas = $this->buildWorkStatusCards($allPegawai);
+        $levelPegawai = $this->buildLevelCards($allPegawai);
+
+        $guruBesar = $allPegawai->filter(function ($p) {
+            $j = $p['jabatan'] ?? '';
+            $n = $p['namaPegawai'] ?? $p['nama'] ?? '';
+            $g = $p['gelarDepan'] ?? '';
+            return stripos($j, 'Profesor') !== false || stripos($j, 'Guru Besar') !== false || stripos($n, 'Prof.') !== false || stripos($g, 'Prof') !== false;
+        })->count();
+
+        $countsLevel = $allPegawai->groupBy(fn($p) => trim($p['levelPegawai'] ?? 'Lainnya'))->map->count();
+
+        $daftarStatistik = [
+            [
+                'title' => 'Pegawai Aktif',
+                'value' => $allPegawai->count(),
+                'href' => null,
+                'iconClass' => 'fa-solid fa-users text-indigo-600',
+                'badgeText' => 'Total SDM',
+                'badgeColor' => 'bg-indigo-600',
+                'footerText' => 'Seluruh Pegawai UNTIRTA',
+            ],
+            [
+                'title' => 'Guru Besar / Profesor',
+                'value' => $guruBesar,
+                'href' => null,
+                'iconClass' => 'fa-solid fa-award text-amber-500',
+                'badgeText' => 'Akademik',
+                'badgeColor' => 'bg-amber-500',
+                'footerText' => 'Fakultas & Pascasarjana',
+            ],
+            [
+                'title' => 'Dosen (Tenaga Pengajar)',
+                'value' => ($countsLevel->get('Dosen', 0)) + ($countsLevel->get('Dosen DT', 0)) + ($countsLevel->get('Dosen Luar Biasa', 0)) + ($countsLevel->get('Dosen LB', 0)),
+                'href' => null,
+                'iconClass' => 'fa-solid fa-chalkboard-user text-blue-600',
+                'badgeText' => 'Tenaga Pengajar',
+                'badgeColor' => 'bg-blue-600',
+                'footerText' => 'Dosen PNS, PPPK & DT',
+            ],
+            [
+                'title' => 'Tenaga Kependidikan',
+                'value' => ($countsLevel->get('Tenaga Kependidikan', 0)) + ($countsLevel->get('Tendik', 0)),
+                'href' => null,
+                'iconClass' => 'fa-solid fa-users-gear text-emerald-600',
+                'badgeText' => 'Tendik',
+                'badgeColor' => 'bg-emerald-600',
+                'footerText' => 'Staf & Layanan Kampus',
+            ],
+        ];
 
         // Siapkan data untuk 3 chart
         $chartStatusPegawai = $this->buildChartData($statusPegawai);
         $chartStatusKerja = $this->buildChartData($datas);
         $chartLevelPegawai = $this->buildChartData($levelPegawai);
 
-        return view('HR.pegawai', compact('statusPegawai', 'datas', 'levelPegawai', 'guruBesar', 'chartStatusPegawai', 'chartStatusKerja', 'chartLevelPegawai'));
+        return view('HR.pegawai', compact(
+            'daftarStatistik',
+            'statusPegawai',
+            'datas',
+            'levelPegawai',
+            'guruBesar',
+            'chartStatusPegawai',
+            'chartStatusKerja',
+            'chartLevelPegawai'
+        ));
     }
 
     /**
@@ -53,9 +111,20 @@ class PegawaiController extends Controller
             $label = $card['label'] ?? '-';
             $value = (int) ($card['value'] ?? 0);
 
-            $labels[] = $label;
-            $data[] = $value;
-            $total += $value;
+            if ($value > 0) {
+                $labels[] = $label;
+                $data[] = $value;
+                $total += $value;
+            }
+        }
+
+        // Fallback if all values are 0
+        if (empty($data) && !empty($cards)) {
+            foreach ($cards as $card) {
+                $labels[] = $card['label'] ?? '-';
+                $data[] = (int) ($card['value'] ?? 0);
+                $total += (int) ($card['value'] ?? 0);
+            }
         }
 
         return [
@@ -65,58 +134,82 @@ class PegawaiController extends Controller
         ];
     }
 
-    private function buildStatusCards(): array
+
+    private function buildStatusCards($allPegawai): array
     {
-        $results = $this->pegawaiService->getData($this->parameterStatusPegawai(1));
+        $counts = $allPegawai->groupBy(function ($p) {
+            $sp = trim($p['statusPegawai'] ?? '');
+            if (!empty($sp) && $sp !== 'Aktif') {
+                return $sp;
+            }
+            return trim($p['statusKerja'] ?? 'PNS');
+        })->map->count();
+
+        $cards = [];
+        foreach ($counts as $label => $count) {
+            $cards[] = $this->makeStatCard($label, $count);
+        }
+
+        return $cards;
+    }
+
+
+    private function buildWorkStatusCards($allPegawai): array
+    {
+        $counts = $allPegawai->groupBy(fn($p) => trim($p['statusKerja'] ?? 'Lainnya'))->map->count();
 
         return [
-            $this->statistikPegawai('Aktif', $results),
-            $this->statistikPegawai('Pensiun', $this->getQuickCount(['status_pegawai' => 2])),
-            $this->statistikPegawai('Meninggal', $this->getQuickCount(['status_pegawai' => 3])),
-            $this->statistikPegawai('Mutasi/Resign', $this->getQuickCount(['status_pegawai' => 4])),
-            $this->statistikPegawai('Alih Status', $this->getQuickCount(['status_pegawai' => 5])),
-            $this->statistikPegawai('Cuti', $this->getQuickCount(['status_pegawai' => 6])),
-            $this->statistikPegawai('Tugas Belajar', $this->getQuickCount(['status_pegawai' => 7])),
-            $this->statistikPegawai('Penugasan', $this->getQuickCount(['status_pegawai' => 19])),
-            $this->statistikPegawai('Tugas Belajar Mandiri', $this->getQuickCount(['status_pegawai' => 20])),
+            $this->makeWorkStatusCard('PNS', $counts->get('PNS', 0)),
+            $this->makeWorkStatusCard('PPPK', $counts->get('PPPK', 0)),
+            $this->makeWorkStatusCard('Honorer', $counts->get('Honorer', 0)),
+            $this->makeWorkStatusCard('BLU', $counts->get('BLU', 0)),
+            $this->makeWorkStatusCard('PKWT', $counts->get('PKWT', 0)),
+            $this->makeWorkStatusCard('PPPK Paruh Waktu', $counts->get('PPPK Paruh Waktu', 0)),
+            $this->makeWorkStatusCard('Outsourcing', $counts->get('Outsourcing', 0)),
+            $this->makeWorkStatusCard('Non BLU', $counts->get('Non BLU', 0)),
+            $this->makeWorkStatusCard('CPNS', $counts->get('CPNS', 0)),
         ];
     }
 
-    private function buildWorkStatusCards(): array
+    private function buildLevelCards($allPegawai): array
     {
+        $counts = $allPegawai->groupBy(fn($p) => trim($p['levelPegawai'] ?? 'Lainnya'))->map->count();
+
+        $tendik = $counts->get('Tenaga Kependidikan', 0) + $counts->get('Tendik', 0);
+        $dosen = $counts->get('Dosen', 0);
+        $dosenDt = $counts->get('Dosen DT', 0);
+        $dosenLb = $counts->get('Dosen Luar Biasa', 0) + $counts->get('Dosen LB', 0);
+
         return [
-            $this->statistikStatusKerja('CPNS', $this->getQuickCount(['status_kerja' => 8])),
-            $this->statistikStatusKerja('PNS', $this->getQuickCount(['status_kerja' => 1])),
-            $this->statistikStatusKerja('BLU', $this->getQuickCount(['status_kerja' => 2])),
-            $this->statistikStatusKerja('Honorer', $this->getQuickCount(['status_kerja' => 3])),
-            $this->statistikStatusKerja('Outsourcing', $this->getQuickCount(['status_kerja' => 4])),
-            $this->statistikStatusKerja('PKWT', $this->getQuickCount(['status_kerja' => 5])),
-            $this->statistikStatusKerja('PPPK', $this->getQuickCount(['status_kerja' => 7])),
-            $this->statistikStatusKerja('Non BLU', $this->getQuickCount(['status_kerja' => 19])),
-            $this->statistikStatusKerja('PPPK Paruh Waktu', $this->getQuickCount(['status_kerja' => 20])),
+            $this->makeLevelCard('Tendik', $tendik),
+            $this->makeLevelCard('Dosen', $dosen),
+            $this->makeLevelCard('Dosen DT', $dosenDt),
+            $this->makeLevelCard('Dosen Luar Biasa', $dosenLb),
         ];
     }
 
-    private function buildLevelCards(): array
+
+    private function makeStatCard(string $title, int $value): array
     {
+        $style = $this->styleStatusPegawai($title);
+
         return [
-            $this->formatCard('Tendik', $this->getQuickCount(['level_pegawai' => 2])),
-            $this->formatCard('Dosen', $this->getQuickCount(['level_pegawai' => 3])),
-            $this->formatCard('Dosen DT', $this->getQuickCount(['level_pegawai' => 7])),
-            $this->formatCard('Dosen Luar Biasa', $this->getQuickCount(['level_pegawai' => 13])),
+            'label' => $title,
+            'value' => $value,
+            'span' => $style['span'],
+            'bg' => $style['bg'],
+            'icon' => $style['icon'],
+            'text' => $style['text'],
+            'iconBg' => $style['iconBg'],
+            'iconColor' => $style['iconColor'],
         ];
     }
 
-    private function getQuickCount(array $parameters): ApiResponse
-    {
-        return $this->pegawaiService->getData(array_merge(['count' => 1], $parameters));
-    }
-
-    private function statistikStatusKerja(string $title, ApiResponse $hasilApi): array
+    private function makeWorkStatusCard(string $title, int $value): array
     {
         return [
             'label' => $title,
-            'value' => $this->extractTotal($hasilApi),
+            'value' => $value,
             'bg' => 'bg-[#4F46E5]',
             'iconBg' => 'bg-white',
             'iconColor' => 'text-indigo-700',
@@ -134,6 +227,59 @@ class PegawaiController extends Controller
             },
         ];
     }
+
+    private function makeLevelCard(string $title, int $value): array
+    {
+        $styles = [
+            'Tendik' => [
+                'bg' => 'bg-emerald-600',
+                'iconBg' => 'bg-emerald-100',
+                'iconColor' => 'text-emerald-700',
+                'icon' => 'fa-solid fa-users-gear',
+                'textColor' => 'text-white',
+            ],
+            'Dosen' => [
+                'bg' => 'bg-blue-600',
+                'iconBg' => 'bg-blue-100',
+                'iconColor' => 'text-blue-700',
+                'icon' => 'fa-solid fa-chalkboard-user',
+                'textColor' => 'text-white',
+            ],
+            'Dosen DT' => [
+                'bg' => 'bg-indigo-600',
+                'iconBg' => 'bg-indigo-100',
+                'iconColor' => 'text-indigo-700',
+                'icon' => 'fa-solid fa-user-tie',
+                'textColor' => 'text-white',
+            ],
+            'Dosen Luar Biasa' => [
+                'bg' => 'bg-purple-600',
+                'iconBg' => 'bg-purple-100',
+                'iconColor' => 'text-purple-700',
+                'icon' => 'fa-solid fa-briefcase',
+                'textColor' => 'text-white',
+            ],
+        ];
+
+        $style = $styles[$title] ?? [
+            'bg' => 'bg-slate-600',
+            'iconBg' => 'bg-slate-100',
+            'iconColor' => 'text-slate-700',
+            'icon' => 'fa-solid fa-user-graduate',
+            'textColor' => 'text-white',
+        ];
+
+        return [
+            'label' => $title,
+            'value' => $value,
+            'bg' => $style['bg'],
+            'iconBg' => $style['iconBg'],
+            'iconColor' => $style['iconColor'],
+            'icon' => $style['icon'],
+            'textColor' => $style['textColor'],
+        ];
+    }
+
 
     public function getApiData(Request $request): JsonResponse
     {
