@@ -173,6 +173,7 @@
                             },
                             x: {
                                 ticks: {
+                                    autoSkip: false,
                                     font: { size: 11 },
                                     color: '#374151',
                                     maxRotation: 0,

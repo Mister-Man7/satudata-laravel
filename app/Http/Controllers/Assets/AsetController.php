@@ -49,7 +49,28 @@ class AsetController extends Controller
         });
 
 
-        return view('Assets.aset', compact('datas', 'warning', 'statusInfo'), [
+        $summaryStats = \Illuminate\Support\Facades\Cache::remember('aset_big_card_stats', now()->addHours(1), function () {
+            if (!class_exists(\App\Models\Aset::class) || !\Illuminate\Support\Facades\Schema::hasTable('asets')) {
+                return null;
+            }
+            $totalUnit = \App\Models\Aset::count();
+            $nilaiPerolehan = \App\Models\Aset::sum('nilai_perolehan');
+            $kondisiBaik = \App\Models\Aset::where('kondisi', 1)->orWhere('kondisi_text', 'Baik')->count();
+            $kondisiRusakBerat = \App\Models\Aset::where('kondisi', 3)->orWhere('kondisi_text', 'Rusak Berat')->count();
+            $kondisiRusakRingan = \App\Models\Aset::where('kondisi', 2)->orWhere('kondisi_text', 'Rusak Ringan')->count();
+            $totalKampus = \App\Models\Aset::whereNotNull('id_kampus')->distinct('id_kampus')->count('id_kampus');
+
+            return [
+                'total_unit' => $totalUnit,
+                'nilai_perolehan' => $nilaiPerolehan,
+                'kondisi_baik' => $kondisiBaik,
+                'kondisi_rusak_berat' => $kondisiRusakBerat,
+                'kondisi_rusak_ringan' => $kondisiRusakRingan,
+                'total_kampus' => $totalKampus > 0 ? $totalKampus : 6,
+            ];
+        });
+
+        return view('Assets.aset', compact('datas', 'warning', 'statusInfo', 'summaryStats'), [
             'title' => 'Aset',
             'level' => 'kampus'
         ]);
