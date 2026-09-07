@@ -67,8 +67,18 @@
                         </div>
                     </div>
                     <div class="flex items-center justify-between mt-auto pt-2">
-                        <span class="text-xs text-gray-600 font-medium">
-                            Updated {{ \Carbon\Carbon::parse($card['updated'])->diffForHumans() }}
+                        @php
+                            $updatedTime = !empty($card['updated']) ? \Carbon\Carbon::parse($card['updated']) : null;
+                            $isNowFallback = $updatedTime && abs(now()->diffInSeconds($updatedTime)) < 120;
+                        @endphp
+                        <span class="text-xs text-gray-400 font-medium">
+                            @if($updatedTime && !$isNowFallback)
+                                Updated {{ $updatedTime->diffForHumans() }}
+                            @else
+                                <span class="inline-flex items-center gap-1.5 text-gray-500">
+                                    <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> SIMANTAP
+                                </span>
+                            @endif
                         </span>
 
                         <a href="{{ $url }}"
