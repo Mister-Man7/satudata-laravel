@@ -41,7 +41,7 @@ class SiakangPenjadwalanService extends AbstractApiClient
             );
         }
 
-        $response = $this->get('/v2/rencana-studi/penjadwalan', $params);
+        $response = $this->get('/rencana-studi/penjadwalan', $params);
 
         if ($response->success) {
             Cache::put($cacheKey, $response->data, now()->addMinutes(10));
