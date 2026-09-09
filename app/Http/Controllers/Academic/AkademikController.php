@@ -343,7 +343,7 @@ class AkademikController extends Controller
         $dosenByStatus = $this->agregasiDosenByStatus($dataDosen);
         $totalDosen = count($dataDosen);
 
-        return view('Academic.akademik', [
+        return view('academic.akademik', [
             'title' => 'Akademik',
             'datas' => $datas,
             'fakultas' => $fakultas,
@@ -532,7 +532,7 @@ class AkademikController extends Controller
 
     public function mahasiswaLulus(Request $request): View
     {
-        return view('Academic.mahasiswa-lulus', [
+        return view('academic.mahasiswa-lulus', [
             'title' => 'Mahasiswa Lulus',
         ]);
     }

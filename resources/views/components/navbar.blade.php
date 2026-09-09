@@ -12,8 +12,6 @@
                         <x-nav-link href="/akademik" :active="request()->is('akademik')">Akademik</x-nav-link>
                         <x-nav-link href="/aset" :active="request()->is('aset')">Aset</x-nav-link>
                         <x-nav-link href="/pegawai" :active="request()->is('pegawai')">Pegawai</x-nav-link>
-                        <x-nav-link href="/infrastruktur" :active="request()->is('infrastruktur')">Infrastruktur
-                        </x-nav-link>
                     </div>
                 </div>
             </div>
@@ -73,7 +71,6 @@
             <x-nav-link href="/akademik" :active="request()->is('akademik')" mobile>Akademik</x-nav-link>
             <x-nav-link href="/aset" :active="request()->is('aset')" mobile>Aset</x-nav-link>
             <x-nav-link href="/pegawai" :active="request()->is('pegawai')" mobile>Pegawai</x-nav-link>
-            <x-nav-link href="/infrastruktur" :active="request()->is('infrastruktur')" mobile>Infrastruktur</x-nav-link>
         </div>
         <div class="border-t border-white/10 pt-4 pb-3">
             <div class="flex items-center px-5">
@@ -82,8 +79,8 @@
                         alt="" class="size-10 rounded-full outline -outline-offset-1 outline-white/10" />
                 </div>
                 <div class="ml-3">
-                    <div class="text-base/5 font-medium text-white">Tom Cook</div>
-                    <div class="text-sm font-medium text-gray-400">tom@example.com</div>
+                    <div class="text-base/5 font-medium text-white">Pengembang</div>
+                    <div class="text-sm font-medium text-gray-400">pengembang@satudata.untirta.ac.id</div>
                 </div>
                 <button type="button"
                     class="ml-auto flex h-10 w-10 items-center justify-center rounded-full text-gray-300 transition hover:bg-white/10 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-400"
