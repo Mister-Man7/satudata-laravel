@@ -112,7 +112,6 @@
                     <li><a href="/akademik" class="hover:font-bold transition">Akademik</a></li>
                     <li><a href="/aset" class="hover:font-bold transition">Aset</a></li>
                     <li><a href="/pegawai" class="hover:font-bold transition">Pegawai</a></li>
-                    <li><a href="/infrastruktur" class="hover:font-bold transition">Infrastruktur</a></li>
                 </ul>
             </div>
         </div>
