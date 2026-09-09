@@ -114,4 +114,12 @@ class SIPPService extends AbstractApiClient
     {
         return $this->get('/api/penelitian', $params);
     }
+
+    /**
+     * Ambil data pengabdian.
+     */
+    public function getPengabdian(array $params = []): ApiResponse
+    {
+        return $this->get('/api/pengabdian', $params);
+    }
 }

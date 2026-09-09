@@ -141,45 +141,154 @@
             </div>
         </div>
 
-        <!-- Education + Penelitian + Pengabdian -->
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-            <div class="rounded-2xl border border-gray-100 bg-white shadow-sm p-6">
-                <h3 class="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
-                    <i class="fa-solid fa-graduation-cap text-blue-500"></i> Education
-                </h3>
-                <div class="space-y-4">
-                    <div class="flex gap-3">
-                        <div class="flex flex-col items-center">
-                            <div class="w-3 h-3 rounded-full bg-blue-500 mt-1"></div>
-                            <div class="w-0.5 flex-1 bg-blue-200"></div>
-                        </div>
-                        <div class="pb-4">
-                            <div class="font-bold text-gray-800">Data tidak tersedia</div>
-                            <div class="text-sm text-gray-500">Informasi pendidikan belum terhubung dari sistem</div>
-                        </div>
+        <!-- Tri Dharma & Education Section -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+            <!-- Publikasi Ilmiah -->
+            <div class="rounded-2xl border border-gray-100 bg-white shadow-sm p-6 flex flex-col justify-between">
+                <div>
+                    <div class="flex items-center justify-between mb-4 pb-3 border-b border-gray-100">
+                        <h3 class="text-lg font-bold text-slate-800 flex items-center gap-2">
+                            <i class="fa-solid fa-book-bookmark text-indigo-500"></i> Publikasi Ilmiah
+                        </h3>
+                        <span class="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-indigo-50 text-indigo-600">
+                            {{ count($publikasi10Tahun) }} Data
+                        </span>
                     </div>
-                </div>
-            </div>
-            <div class="space-y-6">
-                <div class="rounded-2xl border border-gray-100 bg-white shadow-sm p-6">
-                    <h3 class="text-lg font-bold text-gray-800 mb-3 flex items-center gap-2">
-                        <i class="fa-solid fa-microscope text-rose-500"></i> Penelitian
-                    </h3>
-                    <div class="flex flex-wrap gap-2">
-                        @forelse ($penelitianList as $pen)
-                            <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-blue-50 text-blue-700 border border-blue-200/60">
-                                {{ $pen['judul'] }}
-                            </span>
+                    <div class="space-y-3">
+                        @forelse ($publikasi10Tahun as $pub)
+                            <div class="p-3.5 rounded-xl bg-slate-50 border border-slate-100 hover:border-indigo-200 transition-colors">
+                                <div class="flex items-start justify-between gap-2">
+                                    <h4 class="font-semibold text-slate-800 text-sm leading-snug line-clamp-2">{{ $pub['judul'] }}</h4>
+                                    <span class="shrink-0 px-2 py-0.5 rounded text-[11px] font-bold bg-indigo-100 text-indigo-700">
+                                        {{ $pub['tahun'] }}
+                                    </span>
+                                </div>
+                                <div class="mt-2 flex flex-wrap items-center gap-2 text-xs text-slate-500">
+                                    @if (!empty($pub['tipe']) && $pub['tipe'] !== '-')
+                                        <span class="inline-flex items-center gap-1 font-medium text-indigo-600">
+                                            <i class="fa-solid fa-tag text-[10px]"></i> {{ $pub['tipe'] }}
+                                        </span>
+                                    @endif
+                                    @if (!empty($pub['journal']) && $pub['journal'] !== '-')
+                                        <span class="truncate max-w-[200px] text-slate-500">
+                                            <i class="fa-regular fa-newspaper"></i> {{ $pub['journal'] }}
+                                        </span>
+                                    @endif
+                                </div>
+                            </div>
                         @empty
-                            <span class="text-sm text-gray-400 italic">Belum ada data penelitian</span>
+                            <div class="flex flex-col items-center justify-center py-8 text-slate-400">
+                                <i class="fa-regular fa-folder-open text-3xl mb-2 text-slate-300"></i>
+                                <span class="text-sm">Belum ada data publikasi</span>
+                            </div>
                         @endforelse
                     </div>
                 </div>
-                <div class="rounded-2xl border border-gray-100 bg-white shadow-sm p-6">
-                    <h3 class="text-lg font-bold text-gray-800 mb-3 flex items-center gap-2">
-                        <i class="fa-solid fa-handshake-angle text-emerald-500"></i> Pengabdian
-                    </h3>
-                    <p class="text-sm text-gray-500">Data pengabdian belum tersedia dari sistem.</p>
+            </div>
+
+            <!-- Penelitian -->
+            <div class="rounded-2xl border border-gray-100 bg-white shadow-sm p-6 flex flex-col justify-between">
+                <div>
+                    <div class="flex items-center justify-between mb-4 pb-3 border-b border-gray-100">
+                        <h3 class="text-lg font-bold text-slate-800 flex items-center gap-2">
+                            <i class="fa-solid fa-microscope text-rose-500"></i> Penelitian
+                        </h3>
+                        <span class="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-rose-50 text-rose-600">
+                            {{ count($penelitianList) }} Data
+                        </span>
+                    </div>
+                    <div class="space-y-3">
+                        @forelse ($penelitianList as $pen)
+                            <div class="p-3.5 rounded-xl bg-slate-50 border border-slate-100 hover:border-rose-200 transition-colors">
+                                <div class="flex items-start justify-between gap-2">
+                                    <h4 class="font-semibold text-slate-800 text-sm leading-snug line-clamp-2">{{ $pen['judul'] }}</h4>
+                                    <span class="shrink-0 px-2 py-0.5 rounded text-[11px] font-bold bg-rose-100 text-rose-700">
+                                        {{ $pen['tahun'] }}
+                                    </span>
+                                </div>
+                                @if (!empty($pen['tipe']) && $pen['tipe'] !== '-')
+                                    <p class="mt-1.5 text-xs text-slate-600 line-clamp-1">
+                                        <i class="fa-solid fa-layer-group text-[10px] text-slate-400"></i> {{ $pen['tipe'] }}
+                                    </p>
+                                @endif
+                                <div class="mt-2 flex items-center justify-between text-xs">
+                                    @if (!empty($pen['lokasi']) && $pen['lokasi'] !== '-')
+                                        <span class="text-slate-500 truncate max-w-[170px]">
+                                            <i class="fa-solid fa-location-dot text-slate-400"></i> {{ $pen['lokasi'] }}
+                                        </span>
+                                    @else
+                                        <span></span>
+                                    @endif
+                                    @php
+                                        $statusLabel = $pen['status_verifikasi'] ?? '-';
+                                        $isVerified = str_contains(strtolower($statusLabel), 'terverifikasi') && !str_contains(strtolower($statusLabel), 'belum');
+                                    @endphp
+                                    <span class="inline-flex items-center gap-1 font-semibold text-[10px] {{ $isVerified ? 'text-emerald-600' : 'text-amber-600' }}">
+                                        <i class="fa-solid {{ $isVerified ? 'fa-circle-check' : 'fa-circle-exclamation' }}"></i>
+                                        {{ $statusLabel }}
+                                    </span>
+                                </div>
+                            </div>
+                        @empty
+                            <div class="flex flex-col items-center justify-center py-8 text-slate-400">
+                                <i class="fa-regular fa-folder-open text-3xl mb-2 text-slate-300"></i>
+                                <span class="text-sm">Belum ada data penelitian</span>
+                            </div>
+                        @endforelse
+                    </div>
+                </div>
+            </div>
+
+            <!-- Pengabdian -->
+            <div class="rounded-2xl border border-gray-100 bg-white shadow-sm p-6 flex flex-col justify-between">
+                <div>
+                    <div class="flex items-center justify-between mb-4 pb-3 border-b border-gray-100">
+                        <h3 class="text-lg font-bold text-slate-800 flex items-center gap-2">
+                            <i class="fa-solid fa-handshake-angle text-emerald-500"></i> Pengabdian Kepada Masyarakat
+                        </h3>
+                        <span class="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-600">
+                            {{ count($pengabdianList) }} Data
+                        </span>
+                    </div>
+                    <div class="space-y-3">
+                        @forelse ($pengabdianList as $peng)
+                            <div class="p-3.5 rounded-xl bg-slate-50 border border-slate-100 hover:border-emerald-200 transition-colors">
+                                <div class="flex items-start justify-between gap-2">
+                                    <h4 class="font-semibold text-slate-800 text-sm leading-snug line-clamp-2">{{ $peng['judul'] }}</h4>
+                                    <span class="shrink-0 px-2 py-0.5 rounded text-[11px] font-bold bg-emerald-100 text-emerald-700">
+                                        {{ $peng['tahun'] }}
+                                    </span>
+                                </div>
+                                @if (!empty($peng['tipe']) && $peng['tipe'] !== '-')
+                                    <p class="mt-1.5 text-xs text-slate-600 line-clamp-1">
+                                        <i class="fa-solid fa-layer-group text-[10px] text-slate-400"></i> {{ $peng['tipe'] }}
+                                    </p>
+                                @endif
+                                <div class="mt-2 flex items-center justify-between text-xs">
+                                    @if (!empty($peng['lokasi']) && $peng['lokasi'] !== '-')
+                                        <span class="text-slate-500 truncate max-w-[170px]">
+                                            <i class="fa-solid fa-location-dot text-slate-400"></i> {{ $peng['lokasi'] }}
+                                        </span>
+                                    @else
+                                        <span></span>
+                                    @endif
+                                    @php
+                                        $statusLabel = $peng['status_verifikasi'] ?? '-';
+                                        $isVerified = str_contains(strtolower($statusLabel), 'terverifikasi') && !str_contains(strtolower($statusLabel), 'belum');
+                                    @endphp
+                                    <span class="inline-flex items-center gap-1 font-semibold text-[10px] {{ $isVerified ? 'text-emerald-600' : 'text-amber-600' }}">
+                                        <i class="fa-solid {{ $isVerified ? 'fa-circle-check' : 'fa-circle-exclamation' }}"></i>
+                                        {{ $statusLabel }}
+                                    </span>
+                                </div>
+                            </div>
+                        @empty
+                            <div class="flex flex-col items-center justify-center py-8 text-slate-400">
+                                <i class="fa-regular fa-folder-open text-3xl mb-2 text-slate-300"></i>
+                                <span class="text-sm">Belum ada data pengabdian</span>
+                            </div>
+                        @endforelse
+                    </div>
                 </div>
             </div>
         </div>
