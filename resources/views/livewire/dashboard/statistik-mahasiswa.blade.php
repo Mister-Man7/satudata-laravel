@@ -1,43 +1,5 @@
 <div wire:init="loadData" wire:key="statistik-mahasiswa-{{ $selectedYear }}-{{ $selectedSemester }}-{{ $selectedFaculty }}" class="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
-    {{-- Loading Skeleton / Shimmer --}}
-    <div wire:loading.class.remove="hidden" wire:target="loadData" class="shimmer-card">
-        <div class="grid grid-cols-12 gap-6">
-            <div class="col-span-12 flex flex-col gap-3 lg:col-span-7 lg:justify-center">
-                <div>
-                    <div class="shimmer shimmer-text-lg"></div>
-                    <div class="shimmer shimmer-text-sm"></div>
-                </div>
-            </div>
-            <div class="col-span-12 grid grid-cols-1 gap-3 sm:grid-cols-3 lg:col-span-5 lg:items-end">
-                <label class="space-y-2">
-                    <span class="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Tahun Akademik</span>
-                    <div class="shimmer shimmer-select"></div>
-                </label>
-                <label class="space-y-2">
-                    <span class="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Semester</span>
-                    <div class="shimmer shimmer-select"></div>
-                </label>
-                <label class="space-y-2">
-                    <span class="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Fakultas</span>
-                    <div class="shimmer shimmer-select"></div>
-                </label>
-            </div>
-            <div class="col-span-12 rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5 lg:p-6">
-                <div class="mb-5 flex flex-col gap-3 border-b border-slate-100 pb-4 sm:flex-row sm:items-end sm:justify-between">
-                    <div class="flex gap-4">
-                        <div class="shimmer shimmer-summary w-32"></div>
-                        <div class="shimmer shimmer-summary w-32"></div>
-                        <div class="shimmer shimmer-summary w-32"></div>
-                        <div class="shimmer shimmer-summary w-32"></div>
-                    </div>
-                </div>
-                <div class="shimmer shimmer-chart"></div>
-            </div>
-        </div>
-    </div>
-
-    {{-- Actual Content (loaded after loadData completes) --}}
-    <div wire:loading.class="hidden" wire:target="loadData" class="hidden">
+    <div wire:loading.class="opacity-60" wire:target="loadData">
         <div class="rounded-xl bg-white p-5 shadow-sm ring-1 ring-slate-200/70 sm:p-6 lg:p-8" data-statistik-mahasiswa-root data-payload='@json($chartPayload)'>
             <div class="grid grid-cols-12 gap-6">
                 @if ($toastMessage)
