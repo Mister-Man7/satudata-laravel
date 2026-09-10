@@ -8,7 +8,7 @@
     @if($level !== 'kampus')
         <div class="max-w-6xl mx-auto px-8 pt-6 -mb-4">
             <a href="javascript:history.back()"
-               class="inline-flex items-center text-[#4B00FF] hover:text-violet-800 font-medium text-sm transition-colors">
+               class="inline-flex items-center text-[#4B00FF] hover:text-violet-800 font-semibold text-sm transition-colors">
                 <i class="fa-solid fa-arrow-left mr-2"></i> Kembali
             </a>
         </div>

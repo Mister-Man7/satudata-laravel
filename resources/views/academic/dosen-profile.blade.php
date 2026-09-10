@@ -18,8 +18,8 @@
                 </nav>
             </div>
             <a href="{{ route('akademik.perkuliahan', ['semester' => $semester]) }}"
-                class="inline-flex items-center gap-2 rounded-lg bg-teal-500 px-4 py-2 text-sm font-medium text-white hover:bg-teal-600 self-start">
-                <i class="fa-solid fa-arrow-left"></i> Kembali
+                class="inline-flex items-center text-[#4B00FF] hover:text-violet-800 font-semibold text-sm transition-colors self-start">
+                <i class="fa-solid fa-arrow-left mr-2"></i> Kembali
             </a>
         </div>
         <!-- Top Row -->
@@ -148,11 +148,8 @@
                 <div>
                     <div class="flex items-center justify-between mb-4 pb-3 border-b border-gray-100">
                         <h3 class="text-lg font-bold text-slate-800 flex items-center gap-2">
-                            <i class="fa-solid fa-book-bookmark text-indigo-500"></i> Publikasi Ilmiah
+                            <i class="fa-solid fa-book-bookmark text-indigo-500"></i> Publikasi
                         </h3>
-                        <span class="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-indigo-50 text-indigo-600">
-                            {{ count($publikasi10Tahun) }} Data
-                        </span>
                     </div>
                     <div class="space-y-3">
                         @forelse ($publikasi10Tahun as $pub)
@@ -193,9 +190,6 @@
                         <h3 class="text-lg font-bold text-slate-800 flex items-center gap-2">
                             <i class="fa-solid fa-microscope text-rose-500"></i> Penelitian
                         </h3>
-                        <span class="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-rose-50 text-rose-600">
-                            {{ count($penelitianList) }} Data
-                        </span>
                     </div>
                     <div class="space-y-3">
                         @forelse ($penelitianList as $pen)
@@ -246,9 +240,6 @@
                         <h3 class="text-lg font-bold text-slate-800 flex items-center gap-2">
                             <i class="fa-solid fa-handshake-angle text-emerald-500"></i> Pengabdian Kepada Masyarakat
                         </h3>
-                        <span class="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-600">
-                            {{ count($pengabdianList) }} Data
-                        </span>
                     </div>
                     <div class="space-y-3">
                         @forelse ($pengabdianList as $peng)

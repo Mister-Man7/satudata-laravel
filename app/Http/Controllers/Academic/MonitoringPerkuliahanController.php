@@ -9,6 +9,7 @@ use App\Services\Integrations\SiakangMataKuliahService;
 use App\Services\Integrations\SiakangPenjadwalanService;
 use App\Services\Integrations\SimpegPegawaiService;
 use Illuminate\Http\Request;
+use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 use Illuminate\View\View;
@@ -200,7 +201,7 @@ class MonitoringPerkuliahanController extends Controller
             });
 
             foreach ($fakItems as $item) {
-                $key = $item['id'] ?? ($item['kode_mata_kuliah'] ?? null);
+                $key = $item['kode_mata_kuliah'] ?? ($item['kode'] ?? ($item['id'] ?? null));
                 if ($key) {
                     $collectedItems[$key] = $item;
                 }
@@ -214,7 +215,7 @@ class MonitoringPerkuliahanController extends Controller
                 });
 
                 foreach ($prodiItems as $item) {
-                    $key = $item['id'] ?? ($item['kode_mata_kuliah'] ?? null);
+                    $key = $item['kode_mata_kuliah'] ?? ($item['kode'] ?? ($item['id'] ?? null));
                     if ($key && !isset($collectedItems[$key])) {
                         $collectedItems[$key] = $item;
                     }
@@ -437,16 +438,48 @@ class MonitoringPerkuliahanController extends Controller
                 ];
             }
 
+            $totalProdi = count($prodiRows);
+            $totalMK = array_sum(array_column($prodiRows, 'jumlah_mk'));
+            $totalSKS = array_sum(array_column($prodiRows, 'total_sks'));
+
+            $search = trim($request->input('search', ''));
+            $perPage = (int)$request->input('per_page', 10);
+            if ($perPage <= 0) $perPage = 10;
+            $page = (int)$request->input('page', 1);
+
+            if ($search !== '') {
+                $searchLower = strtolower($search);
+                $prodiRows = array_values(array_filter($prodiRows, function ($row) use ($searchLower) {
+                    return str_contains(strtolower($row['nama_prodi'] ?? ''), $searchLower)
+                        || str_contains(strtolower($row['kode_prodi'] ?? ''), $searchLower)
+                        || str_contains(strtolower($row['jenjang'] ?? ''), $searchLower);
+                }));
+            }
+
+            $totalFiltered = count($prodiRows);
+            $offset = ($page - 1) * $perPage;
+            $paginatedItems = array_slice($prodiRows, $offset, $perPage);
+
+            $paginatedProdiRows = new LengthAwarePaginator(
+                $paginatedItems,
+                $totalFiltered,
+                $perPage,
+                $page,
+                ['path' => $request->url(), 'query' => $request->query()]
+            );
+
             $viewData = [
                 'title' => "Monitoring Perkuliahan - {$unit['nama']}",
                 'viewType' => 'prodi_list',
                 'unit' => $unit,
                 'semesterInfo' => $semesterInfo,
                 'semester' => $semester,
-                'prodiRows' => $prodiRows,
-                'totalProdi' => count($prodiRows),
-                'totalMK' => array_sum(array_column($prodiRows, 'jumlah_mk')),
-                'totalSKS' => array_sum(array_column($prodiRows, 'total_sks')),
+                'prodiRows' => $paginatedProdiRows,
+                'totalProdi' => $totalProdi,
+                'totalMK' => $totalMK,
+                'totalSKS' => $totalSKS,
+                'search' => $search,
+                'perPage' => $perPage,
             ];
 
             return view('academic.monitoring-perkuliahan-detail', $viewData);
@@ -477,7 +510,7 @@ class MonitoringPerkuliahanController extends Controller
 
             $dosenCount = count($facultyDosenList);
             foreach ($mataKuliahList as $idx => $mk) {
-                $kodeMk = $mk['kode_mata_kuliah'] ?? '-';
+                $kodeMk = $mk['kode_mata_kuliah'] ?? ($mk['kode'] ?? '-');
                 $mapInfo = $penjadwalanMap[$kodeMk] ?? null;
 
                 $sksTotal = $mapInfo['sks'] ?? (int)($mk['sks'] ?? 0);
@@ -539,7 +572,7 @@ class MonitoringPerkuliahanController extends Controller
             } else {
                 $dosenCount = count($facultyDosenList);
                 foreach ($prodiItems as $idx => $mk) {
-                    $kodeMk = $mk['kode_mata_kuliah'] ?? '-';
+                    $kodeMk = $mk['kode_mata_kuliah'] ?? ($mk['kode'] ?? '-');
                     $mapInfo = $penjadwalanMap[$kodeMk] ?? null;
 
                     $sksTotal = $mapInfo['sks'] ?? (int)($mk['sks'] ?? 0);
@@ -621,8 +654,8 @@ class MonitoringPerkuliahanController extends Controller
                             'sks_praktik' => 0,
                             'tahun_terbit' => '2025',
                             'kode_jadwal' => '-',
-                            'jam_kuliah' => 'Sesuai Jadwal SIMASTER',
-                            'kelas' => 'Reguler',
+                            'jam_kuliah' => '-',
+                            'kelas' => '-',
                             'ruang' => '-',
                             'nip_dosen' => $filterNip,
                             'nama_dosen' => $dosenNama,
@@ -630,7 +663,15 @@ class MonitoringPerkuliahanController extends Controller
                     } else {
                         foreach ($jadwalList as $j) {
                             $ruangWaktu = $j['ruang_dan_waktu'] ?? 'Sesuai Jadwal SIMASTER';
-                            $kelases = array_column($j['kelas'] ?? [], 'nama_kelas');
+                            $kelases = [];
+                            foreach ($j['kelas'] ?? [] as $kItem) {
+                                if (is_array($kItem)) {
+                                    $val = $kItem['nama_kelas'] ?? ($kItem['kelas_format'] ?? ($kItem['kode_kelas'] ?? null));
+                                    if ($val) $kelases[] = $val;
+                                } elseif (is_string($kItem)) {
+                                    $kelases[] = $kItem;
+                                }
+                            }
                             $kelasStr = !empty($kelases) ? implode(', ', $kelases) : 'Reguler';
 
                             $nipJadwalRows[] = [
@@ -660,6 +701,38 @@ class MonitoringPerkuliahanController extends Controller
             }
         }
 
+        $totalJadwal = count($jadwalRows);
+        $totalSKS = array_sum(array_column($jadwalRows, 'sks'));
+
+        $search = trim($request->input('search', ''));
+        $perPage = (int)$request->input('per_page', 10);
+        if ($perPage <= 0) $perPage = 10;
+        $page = (int)$request->input('page', 1);
+
+        if ($search !== '') {
+            $searchLower = strtolower($search);
+            $jadwalRows = array_values(array_filter($jadwalRows, function ($row) use ($searchLower) {
+                return str_contains(strtolower($row['kode_mk'] ?? ''), $searchLower)
+                    || str_contains(strtolower($row['nama_mk'] ?? ''), $searchLower)
+                    || str_contains(strtolower($row['nama_dosen'] ?? ''), $searchLower)
+                    || str_contains(strtolower($row['nip_dosen'] ?? ''), $searchLower)
+                    || str_contains(strtolower($row['kelas'] ?? ''), $searchLower)
+                    || str_contains(strtolower($row['ruang'] ?? ''), $searchLower);
+            }));
+        }
+
+        $totalFiltered = count($jadwalRows);
+        $offset = ($page - 1) * $perPage;
+        $paginatedItems = array_slice($jadwalRows, $offset, $perPage);
+
+        $paginatedJadwalRows = new LengthAwarePaginator(
+            $paginatedItems,
+            $totalFiltered,
+            $perPage,
+            $page,
+            ['path' => $request->url(), 'query' => $request->query()]
+        );
+
         $viewData = [
             'title' => 'Monitoring Perkuliahan - Detail Jadwal',
             'viewType' => 'mk_list',
@@ -667,11 +740,14 @@ class MonitoringPerkuliahanController extends Controller
             'unit' => $unit,
             'selectedKodeProdi' => $selectedKodeProdi,
             'selectedProdiName' => $selectedProdiName,
-            'jadwalRows' => $jadwalRows,
+            'jadwalRows' => $paginatedJadwalRows,
             'semester' => $semester,
             'filterNip' => $filterNip,
-            'totalJadwal' => count($jadwalRows),
+            'totalJadwal' => $totalJadwal,
+            'totalSKS' => $totalSKS,
             'allDosenList' => $facultyDosenList,
+            'search' => $search,
+            'perPage' => $perPage,
         ];
 
         return view('academic.monitoring-perkuliahan-detail', $viewData);
@@ -774,7 +850,15 @@ class MonitoringPerkuliahanController extends Controller
                         } else {
                             foreach ($jadwalList as $j) {
                                 $ruangWaktu = $j['ruang_dan_waktu'] ?? 'Sesuai Jadwal SIMASTER';
-                                $kelases = array_column($j['kelas'] ?? [], 'nama_kelas');
+                                $kelases = [];
+                                foreach ($j['kelas'] ?? [] as $kItem) {
+                                    if (is_array($kItem)) {
+                                        $val = $kItem['nama_kelas'] ?? ($kItem['kelas_format'] ?? ($kItem['kode_kelas'] ?? null));
+                                        if ($val) $kelases[] = $val;
+                                    } elseif (is_string($kItem)) {
+                                        $kelases[] = $kItem;
+                                    }
+                                }
                                 $kelasStr = !empty($kelases) ? implode(', ', $kelases) : 'Reguler';
 
                                 if (!isset($map[$mkCode])) {

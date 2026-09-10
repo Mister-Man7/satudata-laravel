@@ -27,14 +27,14 @@
 
             @if(($viewType ?? '') === 'mk_list' && !empty($selectedKodeProdi))
                 <a href="{{ route('akademik.perkuliahan.detail', ['unitKode' => $unit['kode'], 'semester' => $semester]) }}"
-                    class="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 self-start transition-colors shadow-sm">
-                    <i class="fa-solid fa-arrow-left"></i>
+                    class="inline-flex items-center text-[#4B00FF] hover:text-violet-800 font-semibold text-sm transition-colors self-start">
+                    <i class="fa-solid fa-arrow-left mr-2"></i>
                     Kembali ke Daftar Prodi {{ $unit['kode'] }}
                 </a>
             @else
                 <a href="{{ route('akademik.perkuliahan', ['semester' => $semester]) }}"
-                    class="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 self-start transition-colors shadow-sm">
-                    <i class="fa-solid fa-arrow-left"></i>
+                    class="inline-flex items-center text-[#4B00FF] hover:text-violet-800 font-semibold text-sm transition-colors self-start">
+                    <i class="fa-solid fa-arrow-left mr-2"></i>
                     Kembali ke Fakultas
                 </a>
             @endif
@@ -67,7 +67,7 @@
                 </div>
             </div>
 
-            <!-- Action Buttons -->
+            <!-- Action Buttons & Controls -->
             <div class="flex flex-wrap items-center gap-3 border-b border-gray-100 px-6 py-4">
                 <button onclick="copyTable()"
                     class="inline-flex items-center gap-2 rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">
@@ -87,13 +87,14 @@
                 </button>
 
                 <div class="ml-auto flex flex-wrap items-center gap-3">
-                    @if(($viewType ?? '') === 'mk_list' && !empty($allDosenList))
-                        <!-- Filter Dosen -->
-                        <form method="GET" action="{{ route('akademik.perkuliahan.detail', ['unitKode' => $unit['kode']]) }}" class="flex items-center gap-2">
-                            <input type="hidden" name="semester" value="{{ $semester }}">
-                            @if(!empty($selectedKodeProdi))
-                                <input type="hidden" name="kode_prodi" value="{{ $selectedKodeProdi }}">
-                            @endif
+                    <form method="GET" action="{{ route('akademik.perkuliahan.detail', ['unitKode' => $unit['kode']]) }}" class="flex flex-wrap items-center gap-3">
+                        <input type="hidden" name="semester" value="{{ $semester }}">
+                        @if(!empty($selectedKodeProdi))
+                            <input type="hidden" name="kode_prodi" value="{{ $selectedKodeProdi }}">
+                        @endif
+
+                        @if(($viewType ?? '') === 'mk_list' && !empty($allDosenList))
+                            <!-- Filter Dosen -->
                             <select name="nip" onchange="this.form.submit()"
                                 class="rounded-lg border border-gray-300 bg-white py-2 px-3 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500">
                                 <option value="">Semua Dosen Pengampu</option>
@@ -103,15 +104,26 @@
                                     </option>
                                 @endforeach
                             </select>
-                        </form>
-                    @endif
+                        @endif
 
-                    <!-- Search -->
-                    <div class="relative">
-                        <input type="text" id="searchInput" placeholder="{{ ($viewType ?? '') === 'prodi_list' ? 'Cari program studi...' : 'Cari mata kuliah...' }}"
-                            class="w-full rounded-lg border border-gray-300 bg-white py-2 pl-10 pr-4 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 sm:w-64">
-                        <i class="fa-solid fa-magnifying-glass pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"></i>
-                    </div>
+                        <!-- Per Page Selector -->
+                        <select name="per_page" onchange="this.form.submit()"
+                            class="rounded-lg border border-gray-300 bg-white py-2 px-3 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                            title="Tampilkan per halaman">
+                            <option value="10" {{ ($perPage ?? 10) == 10 ? 'selected' : '' }}>10 / hal</option>
+                            <option value="25" {{ ($perPage ?? 10) == 25 ? 'selected' : '' }}>25 / hal</option>
+                            <option value="50" {{ ($perPage ?? 10) == 50 ? 'selected' : '' }}>50 / hal</option>
+                            <option value="100" {{ ($perPage ?? 10) == 100 ? 'selected' : '' }}>100 / hal</option>
+                        </select>
+
+                        <!-- Search Input -->
+                        <div class="relative">
+                            <input type="text" name="search" id="searchInput" value="{{ $search ?? '' }}"
+                                placeholder="{{ ($viewType ?? '') === 'prodi_list' ? 'Cari program studi...' : 'Cari mata kuliah...' }}"
+                                class="w-full rounded-lg border border-gray-300 bg-white py-2 pl-10 pr-4 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 sm:w-64">
+                            <i class="fa-solid fa-magnifying-glass pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"></i>
+                        </div>
+                    </form>
                 </div>
             </div>
 
@@ -134,9 +146,11 @@
                             </tr>
                         </thead>
                         <tbody class="divide-y divide-gray-100">
-                            @forelse ($prodiRows as $row)
+                            @forelse ($prodiRows as $index => $row)
                                 <tr class="hover:bg-gray-50 transition-colors">
-                                    <td class="whitespace-nowrap px-4 py-3 text-center text-gray-500">{{ $row['no'] }}</td>
+                                    <td class="whitespace-nowrap px-4 py-3 text-center text-gray-500">
+                                        {{ is_object($prodiRows) && method_exists($prodiRows, 'firstItem') ? (($prodiRows->firstItem() ?? 1) + $index) : ($index + 1) }}
+                                    </td>
                                     <td class="whitespace-nowrap px-4 py-3 text-center">
                                         <a href="{{ $row['aksi_url'] }}"
                                             class="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-700 transition-colors">
@@ -185,18 +199,59 @@
                     </table>
                 </div>
 
-                <!-- Footer Agregasi Prodi -->
+                <!-- Footer Agregasi Prodi & Pagination -->
                 <div class="flex flex-wrap items-center justify-between gap-4 border-t border-gray-100 px-6 py-4 rounded-b-2xl bg-gray-50">
-                    <div class="flex items-center gap-6 text-sm text-gray-600">
+                    <div class="flex flex-wrap items-center gap-6 text-sm text-gray-600">
                         <span><strong class="font-semibold text-gray-800">{{ $totalProdi }}</strong> Program Studi</span>
                         <span><strong class="font-semibold text-gray-800">{{ number_format($totalMK) }}</strong> Total Mata Kuliah</span>
                         <span><strong class="font-semibold text-purple-700">{{ number_format($totalSKS) }} SKS</strong> Total</span>
                     </div>
-                    <div class="flex items-center gap-1 text-sm text-gray-600">
-                        <span>Menampilkan</span>
-                        <span class="font-semibold text-gray-800">{{ $totalProdi }}</span>
-                        <span>baris</span>
-                    </div>
+
+                    @if(is_object($prodiRows) && method_exists($prodiRows, 'hasPages'))
+                        <div class="flex flex-wrap items-center gap-4">
+                            <div class="text-xs text-gray-500">
+                                Menampilkan <span class="font-semibold text-gray-800">{{ $prodiRows->firstItem() ?? 0 }}</span> - <span class="font-semibold text-gray-800">{{ $prodiRows->lastItem() ?? 0 }}</span> dari <span class="font-semibold text-gray-800">{{ $prodiRows->total() }}</span> data
+                            </div>
+                            @if($prodiRows->hasPages())
+                                <div class="flex items-center gap-1">
+                                    {{-- Previous Page --}}
+                                    @if ($prodiRows->onFirstPage())
+                                        <span class="px-2.5 py-1 text-xs font-medium text-gray-400 bg-gray-100 rounded-md cursor-not-allowed">
+                                            <i class="fa-solid fa-chevron-left"></i>
+                                        </span>
+                                    @else
+                                        <a href="{{ $prodiRows->previousPageUrl() }}" class="px-2.5 py-1 text-xs font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors shadow-sm">
+                                            <i class="fa-solid fa-chevron-left"></i>
+                                        </a>
+                                    @endif
+
+                                    {{-- Numbered Links --}}
+                                    @foreach ($prodiRows->getUrlRange(max(1, $prodiRows->currentPage() - 2), min($prodiRows->lastPage(), $prodiRows->currentPage() + 2)) as $pNum => $pUrl)
+                                        @if ($pNum == $prodiRows->currentPage())
+                                            <span class="px-3 py-1 text-xs font-bold text-white bg-blue-600 rounded-md shadow-sm">
+                                                {{ $pNum }}
+                                            </span>
+                                        @else
+                                            <a href="{{ $pUrl }}" class="px-3 py-1 text-xs font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors shadow-sm">
+                                                {{ $pNum }}
+                                            </a>
+                                        @endif
+                                    @endforeach
+
+                                    {{-- Next Page --}}
+                                    @if ($prodiRows->hasMorePages())
+                                        <a href="{{ $prodiRows->nextPageUrl() }}" class="px-2.5 py-1 text-xs font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors shadow-sm">
+                                            <i class="fa-solid fa-chevron-right"></i>
+                                        </a>
+                                    @else
+                                        <span class="px-2.5 py-1 text-xs font-medium text-gray-400 bg-gray-100 rounded-md cursor-not-allowed">
+                                            <i class="fa-solid fa-chevron-right"></i>
+                                        </span>
+                                    @endif
+                                </div>
+                            @endif
+                        </div>
+                    @endif
                 </div>
             @else
                 <!-- LEVEL 3: TABEL MATA KULIAH & JADWAL KELAS -->
@@ -219,7 +274,9 @@
                         <tbody class="divide-y divide-gray-100">
                             @forelse ($jadwalRows as $index => $row)
                                 <tr class="hover:bg-gray-50 transition-colors">
-                                    <td class="whitespace-nowrap px-4 py-3 text-center text-gray-500">{{ $index + 1 }}</td>
+                                    <td class="whitespace-nowrap px-4 py-3 text-center text-gray-500">
+                                        {{ is_object($jadwalRows) && method_exists($jadwalRows, 'firstItem') ? (($jadwalRows->firstItem() ?? 1) + $index) : ($index + 1) }}
+                                    </td>
                                     <td class="whitespace-nowrap px-4 py-3 font-bold text-gray-900">
                                         {{ $row['kode_mk'] }}
                                     </td>
@@ -276,16 +333,60 @@
                     </table>
                 </div>
 
-                <!-- Summary Footer -->
+                <!-- Summary Footer & Pagination -->
                 <div class="flex flex-wrap items-center justify-between gap-4 border-t border-gray-100 px-6 py-4 rounded-b-2xl bg-gray-50">
-                    <div class="flex items-center gap-6 text-sm text-gray-600">
+                    <div class="flex flex-wrap items-center gap-6 text-sm text-gray-600">
                         <span><strong class="font-semibold text-gray-800">{{ $totalJadwal }}</strong> Total Mata Kuliah / Jadwal</span>
+                        @if(isset($totalSKS))
+                            <span><strong class="font-semibold text-indigo-700">{{ number_format($totalSKS) }} SKS</strong> Total</span>
+                        @endif
                     </div>
-                    <div class="flex items-center gap-1 text-sm text-gray-600">
-                        <span>Menampilkan</span>
-                        <span class="font-semibold text-gray-800">{{ $totalJadwal }}</span>
-                        <span>baris</span>
-                    </div>
+
+                    @if(is_object($jadwalRows) && method_exists($jadwalRows, 'hasPages'))
+                        <div class="flex flex-wrap items-center gap-4">
+                            <div class="text-xs text-gray-500">
+                                Menampilkan <span class="font-semibold text-gray-800">{{ $jadwalRows->firstItem() ?? 0 }}</span> - <span class="font-semibold text-gray-800">{{ $jadwalRows->lastItem() ?? 0 }}</span> dari <span class="font-semibold text-gray-800">{{ $jadwalRows->total() }}</span> data
+                            </div>
+                            @if($jadwalRows->hasPages())
+                                <div class="flex items-center gap-1">
+                                    {{-- Previous Page --}}
+                                    @if ($jadwalRows->onFirstPage())
+                                        <span class="px-2.5 py-1 text-xs font-medium text-gray-400 bg-gray-100 rounded-md cursor-not-allowed">
+                                            <i class="fa-solid fa-chevron-left"></i>
+                                        </span>
+                                    @else
+                                        <a href="{{ $jadwalRows->previousPageUrl() }}" class="px-2.5 py-1 text-xs font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors shadow-sm">
+                                            <i class="fa-solid fa-chevron-left"></i>
+                                        </a>
+                                    @endif
+
+                                    {{-- Numbered Links --}}
+                                    @foreach ($jadwalRows->getUrlRange(max(1, $jadwalRows->currentPage() - 2), min($jadwalRows->lastPage(), $jadwalRows->currentPage() + 2)) as $pNum => $pUrl)
+                                        @if ($pNum == $jadwalRows->currentPage())
+                                            <span class="px-3 py-1 text-xs font-bold text-white bg-blue-600 rounded-md shadow-sm">
+                                                {{ $pNum }}
+                                            </span>
+                                        @else
+                                            <a href="{{ $pUrl }}" class="px-3 py-1 text-xs font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors shadow-sm">
+                                                {{ $pNum }}
+                                            </a>
+                                        @endif
+                                    @endforeach
+
+                                    {{-- Next Page --}}
+                                    @if ($jadwalRows->hasMorePages())
+                                        <a href="{{ $jadwalRows->nextPageUrl() }}" class="px-2.5 py-1 text-xs font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors shadow-sm">
+                                            <i class="fa-solid fa-chevron-right"></i>
+                                        </a>
+                                    @else
+                                        <span class="px-2.5 py-1 text-xs font-medium text-gray-400 bg-gray-100 rounded-md cursor-not-allowed">
+                                            <i class="fa-solid fa-chevron-right"></i>
+                                        </span>
+                                    @endif
+                                </div>
+                            @endif
+                        </div>
+                    @endif
                 </div>
             @endif
         </div>
