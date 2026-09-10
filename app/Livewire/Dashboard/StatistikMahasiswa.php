@@ -24,43 +24,7 @@ class StatistikMahasiswa extends Component
     public function placeholder(): string
     {
         return <<<'HTML'
-        <div class="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
-            <div class="shimmer-card">
-                <div class="grid grid-cols-12 gap-6">
-                    <div class="col-span-12 flex flex-col gap-3 lg:col-span-7 lg:justify-center">
-                        <div>
-                            <div class="shimmer shimmer-text-lg"></div>
-                            <div class="shimmer shimmer-text-sm"></div>
-                        </div>
-                    </div>
-                    <div class="col-span-12 grid grid-cols-1 gap-3 sm:grid-cols-3 lg:col-span-5 lg:items-end">
-                        <label class="space-y-2">
-                            <span class="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Tahun Akademik</span>
-                            <div class="shimmer shimmer-select"></div>
-                        </label>
-                        <label class="space-y-2">
-                            <span class="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Semester</span>
-                            <div class="shimmer shimmer-select"></div>
-                        </label>
-                        <label class="space-y-2">
-                            <span class="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Fakultas</span>
-                            <div class="shimmer shimmer-select"></div>
-                        </label>
-                    </div>
-                    <div class="col-span-12 rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5 lg:p-6">
-                        <div class="mb-5 flex flex-col gap-3 border-b border-slate-100 pb-4 sm:flex-row sm:items-end sm:justify-between">
-                            <div class="flex gap-4">
-                                <div class="shimmer shimmer-summary w-32"></div>
-                                <div class="shimmer shimmer-summary w-32"></div>
-                                <div class="shimmer shimmer-summary w-32"></div>
-                                <div class="shimmer shimmer-summary w-32"></div>
-                            </div>
-                        </div>
-                        <div class="shimmer shimmer-chart"></div>
-                    </div>
-                </div>
-            </div>
-        </div>
+        <div class="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8"></div>
         HTML;
     }
 
