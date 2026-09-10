@@ -6,7 +6,7 @@
     <section class="max-w-9xl mx-auto px-4 sm:px-6 lg:px-8 pt-8 pb-12 font-sans">
         <div class="mb-6">
             <a href="javascript:history.back()"
-               class="inline-flex items-center text-[#4B00FF] hover:text-violet-800 font-medium text-sm transition-colors">
+               class="inline-flex items-center text-[#4B00FF] hover:text-violet-800 font-semibold text-sm transition-colors">
                 <i class="fa-solid fa-arrow-left mr-2"></i>
                 Kembali ke Daftar Ruangan
             </a>

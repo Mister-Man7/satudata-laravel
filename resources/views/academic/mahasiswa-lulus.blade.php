@@ -5,8 +5,8 @@
 
     <section class="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
         <div class="mb-6">
-            <a href="{{ route('akademik') }}" class="text-sm font-bold text-blue-600 hover:text-blue-700">
-                ← Kembali ke Akademik
+            <a href="{{ route('akademik') }}" class="inline-flex items-center text-[#4B00FF] hover:text-violet-800 font-semibold text-sm transition-colors">
+                <i class="fa-solid fa-arrow-left mr-2"></i> Kembali ke Akademik
             </a>
 
             <h1 class="mt-4 text-2xl font-extrabold tracking-tight text-gray-900">
