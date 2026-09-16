@@ -3,7 +3,7 @@
 use App\Http\Controllers\Academic\AkademikController;
 use App\Http\Controllers\Academic\MonitoringPerkuliahanController;
 use App\Http\Controllers\Assets\AsetController;
-use App\Http\Controllers\HR\PegawaiController;
+use App\Http\Controllers\Pegawai\PegawaiController;
 use App\Http\Controllers\Integration\SIPPController;
 use App\Http\Controllers\Integration\TirtaAgentController;
 use Illuminate\Support\Facades\Route;

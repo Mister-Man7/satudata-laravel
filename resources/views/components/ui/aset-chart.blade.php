@@ -18,7 +18,7 @@
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {{-- Chart Bar --}}
             <div class="flex items-center justify-center" style="height: 300px;">
-                <canvas id="kondisiBarChart"></canvas>
+                <canvas data-kondisi-bar-chart data-payload='@json($chartData)'></canvas>
             </div>
 
             {{-- Legend / Detail --}}
@@ -51,82 +51,4 @@
         </div>
     </div>
 </section>
-
-@push('scripts')
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
-<script>
-    document.addEventListener('DOMContentLoaded', function () {
-        const ctx = document.getElementById('kondisiBarChart');
-        if (!ctx) return;
-
-        const labels = @json($chartData['labels']);
-        const data = @json($chartData['data']);
-        const colors = ['#30A64A', '#FFA726', '#EF5350', '#42A5F5', '#AB47BC', '#78909C'];
-
-        new Chart(ctx, {
-            type: 'bar',
-            data: {
-                labels: labels,
-                datasets: [{
-                    label: 'Jumlah Barang',
-                    data: data,
-                    backgroundColor: labels.map((_, i) => colors[i % colors.length] + 'CC'),
-                    borderColor: labels.map((_, i) => colors[i % colors.length]),
-                    borderWidth: 2,
-                    borderRadius: 8,
-                    barThickness: 50,
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: {
-                    legend: {
-                        display: false
-                    },
-                    tooltip: {
-                        backgroundColor: '#1f2937',
-                        titleFont: { size: 13, weight: '600' },
-                        bodyFont: { size: 12 },
-                        padding: 12,
-                        cornerRadius: 8,
-                        callbacks: {
-                            label: function(context) {
-                                const total = data.reduce((a, b) => a + b, 0);
-                                const percent = total > 0 ? ((context.raw / total) * 100).toFixed(1) : 0;
-                                return context.raw + ' barang (' + percent + '%)';
-                            }
-                        }
-                    }
-                },
-                scales: {
-                    y: {
-                        beginAtZero: true,
-                        ticks: {
-                            stepSize: 1,
-                            font: { size: 12 },
-                            color: '#6b7280'
-                        },
-                        grid: {
-                            color: '#f3f4f6'
-                        }
-                    },
-                    x: {
-                        ticks: {
-                            autoSkip: false,
-                            font: { size: 11 },
-                            color: '#374151',
-                            maxRotation: 45,
-                            minRotation: 0
-                        },
-                        grid: {
-                            display: false
-                        }
-                    }
-                }
-            }
-        });
-    });
-</script>
-@endpush
 @endif

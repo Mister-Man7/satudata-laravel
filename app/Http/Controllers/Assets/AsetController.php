@@ -49,7 +49,7 @@ class AsetController extends Controller
         });
 
 
-        $summaryStats = \Illuminate\Support\Facades\Cache::remember('aset_big_card_stats', now()->addHours(1), function () {
+        $summaryStats = \Illuminate\Support\Facades\Cache::remember('aset_big_card_stats', now()->addHours(1), function () use ($kampusList) {
             if (!class_exists(\App\Models\Aset::class) || !\Illuminate\Support\Facades\Schema::hasTable('asets')) {
                 return null;
             }
@@ -58,7 +58,96 @@ class AsetController extends Controller
             $kondisiBaik = \App\Models\Aset::where('kondisi', 1)->orWhere('kondisi_text', 'Baik')->count();
             $kondisiRusakBerat = \App\Models\Aset::where('kondisi', 3)->orWhere('kondisi_text', 'Rusak Berat')->count();
             $kondisiRusakRingan = \App\Models\Aset::where('kondisi', 2)->orWhere('kondisi_text', 'Rusak Ringan')->count();
-            $totalKampus = \App\Models\Aset::whereNotNull('id_kampus')->distinct('id_kampus')->count('id_kampus');
+
+            $kampusBreakdown = [];
+            $listToProcess = !empty($kampusList) ? $kampusList : [];
+
+            if (empty($listToProcess)) {
+                $dbKampusNames = [
+                    'KAMPUS-SINDANGSARI' => 'Kampus Sindangsari',
+                    'KAMPUS-PAKUPATAN' => 'Kampus Pakupatan',
+                    'KAMPUS-KEPANDEAN' => 'Kampus Kepandean',
+                    'KAMPUS-CILEGON' => 'Kampus Cilegon',
+                    'KAMPUS-CIWARU' => 'Kampus Ciwaru',
+                ];
+                foreach ($dbKampusNames as $kId => $kName) {
+                    $listToProcess[] = [
+                        'id_kampus' => $kId,
+                        'nama_kampus' => $kName,
+                    ];
+                }
+            }
+
+            foreach ($listToProcess as $kampus) {
+                $name = $kampus['nama_kampus'] ?? 'Kampus';
+                $kId = $kampus['id_kampus'] ?? null;
+                $kw = trim(str_ireplace('kampus', '', $name));
+
+                $qBase = \App\Models\Aset::query();
+                if ($kId && !str_starts_with($kId, 'KAMPUS-')) {
+                    $qBase->where('id_kampus', $kId);
+                } elseif (!empty($kw)) {
+                    $qBase->where('lokasi_lengkap', 'like', '%' . $kw . '%');
+                }
+
+                $baik = (clone $qBase)->where(function ($q) {
+                    $q->where('kondisi', 1)->orWhere('kondisi_text', 'Baik');
+                })->count();
+
+                $rusakRingan = (clone $qBase)->where(function ($q) {
+                    $q->where('kondisi', 2)->orWhere('kondisi_text', 'Rusak Ringan');
+                })->count();
+
+                $rusakBerat = (clone $qBase)->where(function ($q) {
+                    $q->where('kondisi', 3)->orWhere('kondisi_text', 'Rusak Berat');
+                })->count();
+
+                if (str_contains(strtoupper($name), 'SINDANGSARI')) {
+                    $unassignedBaik = \App\Models\Aset::where(function ($q) {
+                        $q->where('lokasi_lengkap', '-')
+                            ->orWhereNull('lokasi_lengkap')
+                            ->orWhere(function ($subq) {
+                                $subq->where('lokasi_lengkap', 'not like', '%Sindangsari%')
+                                    ->where('lokasi_lengkap', 'not like', '%Pakupatan%')
+                                    ->where('lokasi_lengkap', 'not like', '%Kepandean%')
+                                    ->where('lokasi_lengkap', 'not like', '%Cilegon%')
+                                    ->where('lokasi_lengkap', 'not like', '%Ciwaru%');
+                            });
+                    })->where(function ($q) {
+                        $q->where('kondisi', 1)->orWhere('kondisi_text', 'Baik');
+                    })->count();
+
+                    $unassignedRusakBerat = \App\Models\Aset::where(function ($q) {
+                        $q->where('lokasi_lengkap', '-')
+                            ->orWhereNull('lokasi_lengkap')
+                            ->orWhere(function ($subq) {
+                                $subq->where('lokasi_lengkap', 'not like', '%Sindangsari%')
+                                    ->where('lokasi_lengkap', 'not like', '%Pakupatan%')
+                                    ->where('lokasi_lengkap', 'not like', '%Kepandean%')
+                                    ->where('lokasi_lengkap', 'not like', '%Cilegon%')
+                                    ->where('lokasi_lengkap', 'not like', '%Ciwaru%');
+                            });
+                    })->where(function ($q) {
+                        $q->where('kondisi', 3)->orWhere('kondisi_text', 'Rusak Berat');
+                    })->count();
+
+                    $baik += $unassignedBaik;
+                    $rusakBerat += $unassignedRusakBerat;
+                }
+
+                $total = $baik + $rusakRingan + $rusakBerat;
+                $pctBaik = $total > 0 ? round(($baik / $total) * 100, 1) : 0;
+
+                $kampusBreakdown[] = [
+                    'id_kampus' => $kId,
+                    'nama_kampus' => $name,
+                    'total_unit' => $total,
+                    'kondisi_baik' => $baik,
+                    'kondisi_rusak_ringan' => $rusakRingan,
+                    'kondisi_rusak_berat' => $rusakBerat,
+                    'pct_baik' => $pctBaik,
+                ];
+            }
 
             return [
                 'total_unit' => $totalUnit,
@@ -66,7 +155,8 @@ class AsetController extends Controller
                 'kondisi_baik' => $kondisiBaik,
                 'kondisi_rusak_berat' => $kondisiRusakBerat,
                 'kondisi_rusak_ringan' => $kondisiRusakRingan,
-                'total_kampus' => $totalKampus > 0 ? $totalKampus : 6,
+                'total_kampus' => count($kampusBreakdown) > 0 ? count($kampusBreakdown) : 5,
+                'kampus_breakdown' => $kampusBreakdown,
             ];
         });
 

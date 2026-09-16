@@ -568,7 +568,27 @@ class MonitoringPerkuliahanController extends Controller
             });
 
             if (empty($prodiItems)) {
-                $jadwalRows = $this->generateFallbackMataKuliahForProdi($selectedKodeProdi, $selectedProdiName, $facultyDosenList, $penjadwalanMap);
+                if (!empty($penjadwalanMap)) {
+                    $jadwalRows = [];
+                    foreach ($penjadwalanMap as $kodeMk => $mapInfo) {
+                        $jadwalRows[] = [
+                            'kode_mk' => $kodeMk,
+                            'nama_mk' => $mapInfo['nama_mk'] ?? ('Mata Kuliah ' . $kodeMk),
+                            'sks' => $mapInfo['sks'] ?? 0,
+                            'sks_teori' => $mapInfo['sks_teori'] ?? ($mapInfo['sks'] ?? 0),
+                            'sks_praktik' => $mapInfo['sks_praktik'] ?? 0,
+                            'tahun_terbit' => '2025',
+                            'kode_jadwal' => '-',
+                            'jam_kuliah' => $mapInfo['jam_kuliah'] ?? 'Sesuai Jadwal SIMASTER',
+                            'kelas' => $mapInfo['kelas'] ?? 'Reguler',
+                            'ruang' => $mapInfo['ruang'] ?? '-',
+                            'nip_dosen' => $mapInfo['nip_dosen'] ?? '-',
+                            'nama_dosen' => $mapInfo['nama_dosen'] ?? '-',
+                        ];
+                    }
+                } else {
+                    $jadwalRows = $this->generateFallbackMataKuliahForProdi($selectedKodeProdi, $selectedProdiName, $facultyDosenList, $penjadwalanMap);
+                }
             } else {
                 $dosenCount = count($facultyDosenList);
                 foreach ($prodiItems as $idx => $mk) {
@@ -832,19 +852,29 @@ class MonitoringPerkuliahanController extends Controller
                 if ($res->success && !empty($res->data['data'])) {
                     $dosenNama = $res->data['dosen']['nama'] ?? ($dosen['nama'] ?? '');
                     foreach ($res->data['data'] as $item) {
-                        $mkCode = $item['mata_kuliah']['kode'] ?? ($item['mata_kuliah']['kode_mata_kuliah'] ?? null);
+                        $mkInfo = $item['mata_kuliah'] ?? [];
+                        $mkCode = $mkInfo['kode'] ?? ($mkInfo['kode_mata_kuliah'] ?? null);
                         if (!$mkCode) continue;
+
+                        $namaMk = $mkInfo['nama'] ?? ($mkInfo['nama_mata_kuliah'] ?? $mkCode);
+                        $sksVal = (int)($mkInfo['sks'] ?? 0);
+                        $sksTeori = (int)($mkInfo['sks_teori'] ?? $sksVal);
+                        $sksPraktik = (int)($mkInfo['sks_praktik'] ?? 0);
 
                         $jadwalList = $item['jadwal'] ?? [];
                         if (empty($jadwalList)) {
                             if (!isset($map[$mkCode])) {
                                 $map[$mkCode] = [
+                                    'kode_mk' => $mkCode,
+                                    'nama_mk' => $namaMk,
                                     'nip_dosen' => $nip,
                                     'nama_dosen' => $dosenNama,
                                     'jam_kuliah' => 'Sesuai Jadwal SIMASTER',
                                     'kelas' => 'Reguler',
                                     'ruang' => '-',
-                                    'sks' => (int)($item['mata_kuliah']['sks'] ?? 0),
+                                    'sks' => $sksVal,
+                                    'sks_teori' => $sksTeori,
+                                    'sks_praktik' => $sksPraktik,
                                 ];
                             }
                         } else {
@@ -863,12 +893,16 @@ class MonitoringPerkuliahanController extends Controller
 
                                 if (!isset($map[$mkCode])) {
                                     $map[$mkCode] = [
+                                        'kode_mk' => $mkCode,
+                                        'nama_mk' => $namaMk,
                                         'nip_dosen' => $nip,
                                         'nama_dosen' => $dosenNama,
                                         'jam_kuliah' => $ruangWaktu,
                                         'kelas' => $kelasStr,
                                         'ruang' => $ruangWaktu,
-                                        'sks' => (int)($j['sks'] ?? ($item['mata_kuliah']['sks'] ?? 0)),
+                                        'sks' => (int)($j['sks'] ?? ($mkInfo['sks'] ?? 0)),
+                                        'sks_teori' => (int)($j['sks_teori'] ?? $sksTeori),
+                                        'sks_praktik' => (int)($j['sks_praktik'] ?? $sksPraktik),
                                     ];
                                 }
                             }

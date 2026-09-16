@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Http\Controllers\HR;
+namespace App\Http\Controllers\Pegawai;
 
 use App\Http\Controllers\Controller;
 use App\Services\DTO\ApiResponse;
@@ -86,7 +86,7 @@ class PegawaiController extends Controller
         $chartStatusKerja = $this->buildChartData($datas);
         $chartLevelPegawai = $this->buildChartData($levelPegawai);
 
-        return view('HR.pegawai', compact(
+        return view('Pegawai.pegawai', compact(
             'daftarStatistik',
             'statusPegawai',
             'datas',
