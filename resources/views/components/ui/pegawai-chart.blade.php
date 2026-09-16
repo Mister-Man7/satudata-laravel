@@ -88,7 +88,7 @@
             @endif
 
             <div class="relative" style="height: {{ $height }}px;">
-                <canvas id="{{ $chartId }}"></canvas>
+                <canvas id="{{ $chartId }}" data-pegawai-chart data-payload='@json($chartData)' data-type="{{ $type }}" data-title="{{ $title }}" data-show-legend="{{ $showLegend ? 'true' : 'false' }}" data-is-cartesian="{{ $isCartesian ? 'true' : 'false' }}" data-dataset='@json($dataset)'></canvas>
             </div>
         </div>
     </section>
@@ -106,89 +106,7 @@
         @endif
 
         <div class="relative w-full" style="height: {{ $height }}px;">
-            <canvas id="{{ $chartId }}"></canvas>
+            <canvas id="{{ $chartId }}" data-pegawai-chart data-payload='@json($chartData)' data-type="{{ $type }}" data-title="{{ $title }}" data-show-legend="{{ $showLegend ? 'true' : 'false' }}" data-is-cartesian="{{ $isCartesian ? 'true' : 'false' }}" data-dataset='@json($dataset)'></canvas>
         </div>
     @endif
-
-
-    @push('scripts')
-        <script>
-            document.addEventListener('DOMContentLoaded', function () {
-                const ctx = document.getElementById('{{ $chartId }}');
-                if (!ctx) return;
-
-                const labels = @json(array_values($chartData['labels']));
-                const dataset = @json($dataset);
-                const total = dataset.data.reduce((a, b) => a + b, 0);
-
-                new Chart(ctx, {
-                    type: '{{ $type }}',
-                    data: {
-                        labels: labels,
-                        datasets: [dataset]
-                    },
-                    options: {
-                        responsive: true,
-                        maintainAspectRatio: false,
-                        cutout: '68%',
-                        plugins: {
-                            legend: {
-                                display: {{ $showLegend ? 'true' : 'false' }},
-                                position: 'bottom',
-                                labels: {
-                                    padding: 12,
-                                    usePointStyle: true,
-                                    pointStyle: 'circle',
-                                    font: { size: 11, weight: '500' },
-                                    color: '#4b5563'
-                                }
-                            },
-                            tooltip: {
-                                backgroundColor: '#111827',
-                                titleFont: { size: 12, weight: '600' },
-                                bodyFont: { size: 12 },
-                                padding: 10,
-                                cornerRadius: 8,
-                                callbacks: {
-                                    label: function (context) {
-                                        const value = context.raw;
-                                        const percent = total > 0 ? ((value / total) * 100).toFixed(1) : 0;
-                                        const isCartesian = {{ $isCartesian ? 'true' : 'false' }};
-                                        return ' ' + value + ' orang' + (isCartesian ? '' : ' (' + percent + '%)');
-                                    }
-                                }
-                            }
-                        },
-                        @if($isCartesian)
-                        scales: {
-                            y: {
-                                beginAtZero: true,
-                                ticks: {
-                                    font: { size: 11 },
-                                    color: '#6b7280'
-                                },
-                                grid: {
-                                    color: '#f3f4f6'
-                                }
-                            },
-                            x: {
-                                ticks: {
-                                    autoSkip: false,
-                                    font: { size: 11 },
-                                    color: '#374151',
-                                    maxRotation: 0,
-                                    minRotation: 0
-                                },
-                                grid: {
-                                    display: false
-                                }
-                            }
-                        }
-                        @endif
-                    }
-                });
-
-            });
-        </script>
-    @endpush
 @endif

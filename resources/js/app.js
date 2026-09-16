@@ -742,6 +742,360 @@ window.initDosenStatusChart = function (ChartLibrary) {
     });
 };
 
+// chart Aset Combo Stacked
+window.initAsetComboStackedChart = function (ChartLibrary) {
+    const canvas = document.querySelector('[data-aset-combo-chart]');
+    if (!canvas) return;
+
+    const payloadRaw = canvas.getAttribute('data-payload');
+    if (!payloadRaw) return;
+
+    let rawData = [];
+    try {
+        rawData = JSON.parse(payloadRaw);
+    } catch (e) {
+        console.error('Failed parsing data-payload for asset chart:', e);
+        return;
+    }
+
+    if (!Array.isArray(rawData) || rawData.length === 0) return;
+
+    const labels = rawData.map(k => (k.nama_kampus || '').replace('Kampus ', ''));
+    const dataBaik = rawData.map(k => k.kondisi_baik || 0);
+    const dataRusakBerat = rawData.map(k => k.kondisi_rusak_berat || 0);
+    const dataRusakRingan = rawData.map(k => k.kondisi_rusak_ringan || 0);
+    const dataTotal = rawData.map(k => k.total_unit || 0);
+
+    const hasRusakRingan = dataRusakRingan.some(v => v > 0);
+
+    const asetChartNumbersPlugin = {
+        id: 'asetChartNumbers',
+        afterDatasetsDraw(chart) {
+            const { ctx, data, scales: { x } } = chart;
+            ctx.save();
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+
+            chart.data.datasets.forEach((dataset, dsIndex) => {
+                if (dataset.type === 'line') return;
+                const meta = chart.getDatasetMeta(dsIndex);
+                if (meta.hidden) return;
+
+                meta.data.forEach((bar, index) => {
+                    const value = dataset.data[index];
+                    if (!value || value === 0) return;
+
+                    const height = Math.abs(bar.base - bar.y);
+                    if (height > 16) {
+                        ctx.font = '700 11px sans-serif';
+                        ctx.fillStyle = '#000000';
+                        ctx.fillText(value.toLocaleString('id-ID'), bar.x, bar.y + (height / 2));
+                    }
+                });
+            });
+
+            ctx.font = '800 13px sans-serif';
+            ctx.fillStyle = '#000000';
+            ctx.textBaseline = 'bottom';
+
+            for (let i = 0; i < data.labels.length; i++) {
+                let total = dataTotal[i] || 0;
+                let minTopY = chart.chartArea.bottom;
+
+                chart.data.datasets.forEach((dataset, dsIdx) => {
+                    if (dataset.type === 'line') return;
+                    const meta = chart.getDatasetMeta(dsIdx);
+                    if (!meta.hidden) {
+                        const val = dataset.data[i] || 0;
+                        const bar = meta.data[i];
+                        if (bar && val > 0 && bar.y < minTopY) {
+                            minTopY = bar.y;
+                        }
+                    }
+                });
+
+                if (total > 0 && minTopY < chart.chartArea.bottom) {
+                    ctx.fillText(total.toLocaleString('id-ID'), x.getPixelForValue(i), minTopY - 6);
+                }
+            }
+            ctx.restore();
+        }
+    };
+
+    const datasets = [
+        {
+            type: 'line',
+            label: 'Total Unit Aset',
+            data: dataTotal,
+            borderColor: '#ffb74d',
+            backgroundColor: '#ffb74d',
+            pointBackgroundColor: '#ffb74d',
+            pointBorderColor: '#ffffff',
+            pointBorderWidth: 2,
+            pointRadius: 5,
+            pointHoverRadius: 7,
+            borderWidth: 2.5,
+            tension: 0.3,
+            order: 1
+        },
+        {
+            type: 'bar',
+            label: 'Rusak Berat',
+            data: dataRusakBerat,
+            backgroundColor: '#ff5252',
+            stack: 'asetStack',
+            barThickness: 56,
+            borderRadius: hasRusakRingan ? 0 : { topLeft: 4, topRight: 4 },
+            order: 3
+        },
+        {
+            type: 'bar',
+            label: 'Kondisi Baik',
+            data: dataBaik,
+            backgroundColor: '#00e676',
+            stack: 'asetStack',
+            barThickness: 56,
+            borderRadius: { topLeft: 6, topRight: 6 },
+            order: 2
+        }
+    ];
+
+    if (hasRusakRingan) {
+        datasets.splice(2, 0, {
+            type: 'bar',
+            label: 'Rusak Ringan',
+            data: dataRusakRingan,
+            backgroundColor: '#b9f6ca',
+            stack: 'asetStack',
+            barThickness: 56,
+            order: 2.5
+        });
+    }
+
+    if (canvas._chartInstance) {
+        canvas._chartInstance.destroy();
+    }
+
+    canvas._chartInstance = new ChartLibrary(canvas, {
+        plugins: [asetChartNumbersPlugin],
+        data: {
+            labels: labels,
+            datasets: datasets
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            layout: {
+                padding: { top: 30, bottom: 10 }
+            },
+            interaction: {
+                mode: 'index',
+                intersect: false
+            },
+            plugins: {
+                legend: {
+                    display: false
+                },
+                tooltip: {
+                    backgroundColor: 'rgba(15, 23, 42, 0.92)',
+                    titleFont: { size: 13, weight: 'bold' },
+                    bodyFont: { size: 12 },
+                    padding: 12,
+                    cornerRadius: 8,
+                    callbacks: {
+                        title: (items) => 'Kampus ' + items[0].label,
+                        label: (context) => {
+                            const val = context.parsed.y || 0;
+                            return `  ${context.dataset.label}: ${val.toLocaleString('id-ID')} unit`;
+                        }
+                    }
+                }
+            },
+            scales: {
+                x: {
+                    stacked: true,
+                    grid: { display: false, drawBorder: false },
+                    ticks: {
+                        font: { size: 13, weight: '600' },
+                        color: '#4b5563',
+                        padding: 8
+                    }
+                },
+                y: {
+                    stacked: true,
+                    beginAtZero: true,
+                    grid: {
+                        color: '#f1f5f9',
+                        drawBorder: false
+                    },
+                    title: {
+                        display: true,
+                        text: 'Values',
+                        color: '#6b7280',
+                        font: { size: 12, weight: '500' }
+                    },
+                    ticks: {
+                        font: { size: 12 },
+                        color: '#6b7280',
+                        callback: (val) => val >= 1000 ? (val / 1000) + 'k' : val
+                    }
+                }
+            }
+        }
+    });
+};
+
+// chart Klasifikasi Barang (Kondisi Bar)
+window.initKondisiBarChart = function (ChartLibrary) {
+    const canvas = document.querySelector('[data-kondisi-bar-chart]');
+    if (!canvas) return;
+
+    const payloadRaw = canvas.getAttribute('data-payload');
+    if (!payloadRaw) return;
+
+    let chartData = {};
+    try {
+        chartData = JSON.parse(payloadRaw);
+    } catch (e) {
+        return;
+    }
+
+    const labels = chartData.labels || [];
+    const data = chartData.data || [];
+    const colors = ['#30A64A', '#FFA726', '#EF5350', '#42A5F5', '#AB47BC', '#78909C'];
+
+    if (canvas._chartInstance) {
+        canvas._chartInstance.destroy();
+    }
+
+    canvas._chartInstance = new ChartLibrary(canvas, {
+        type: 'bar',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: 'Jumlah Barang',
+                data: data,
+                backgroundColor: labels.map((_, i) => colors[i % colors.length] + 'CC'),
+                borderColor: labels.map((_, i) => colors[i % colors.length]),
+                borderWidth: 2,
+                borderRadius: 8,
+                barThickness: 50,
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    backgroundColor: '#1f2937',
+                    titleFont: { size: 13, weight: '600' },
+                    bodyFont: { size: 12 },
+                    padding: 12,
+                    cornerRadius: 8,
+                    callbacks: {
+                        label: function(context) {
+                            const total = data.reduce((a, b) => a + b, 0);
+                            const percent = total > 0 ? ((context.raw / total) * 100).toFixed(1) : 0;
+                            return context.raw + ' barang (' + percent + '%)';
+                        }
+                    }
+                }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    ticks: { stepSize: 1, font: { size: 12 }, color: '#6b7280' },
+                    grid: { color: '#f3f4f6' }
+                },
+                x: {
+                    ticks: { autoSkip: false, font: { size: 11 }, color: '#374151', maxRotation: 45, minRotation: 0 },
+                    grid: { display: false }
+                }
+            }
+        }
+    });
+};
+
+// chart Pegawai
+window.initPegawaiCharts = function (ChartLibrary) {
+    document.querySelectorAll('[data-pegawai-chart]').forEach((canvas) => {
+        const payloadRaw = canvas.getAttribute('data-payload');
+        if (!payloadRaw) return;
+
+        let chartData = {};
+        try {
+            chartData = JSON.parse(payloadRaw);
+        } catch (e) {
+            return;
+        }
+
+        const type = canvas.getAttribute('data-type') || 'bar';
+        const title = canvas.getAttribute('data-title') || 'Statistik Pegawai';
+        const showLegend = canvas.getAttribute('data-show-legend') === 'true';
+        const isCartesian = canvas.getAttribute('data-is-cartesian') === 'true';
+        const dataset = JSON.parse(canvas.getAttribute('data-dataset') || '{}');
+        const labels = Array.isArray(chartData.labels) ? chartData.labels : Object.values(chartData.labels || {});
+
+        const total = (dataset.data || []).reduce((a, b) => a + b, 0);
+
+        if (canvas._chartInstance) {
+            canvas._chartInstance.destroy();
+        }
+
+        canvas._chartInstance = new ChartLibrary(canvas, {
+            type: type,
+            data: {
+                labels: labels,
+                datasets: [dataset]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                cutout: '68%',
+                plugins: {
+                    legend: {
+                        display: showLegend,
+                        position: 'bottom',
+                        labels: {
+                            padding: 12,
+                            usePointStyle: true,
+                            pointStyle: 'circle',
+                            font: { size: 11, weight: '500' },
+                            color: '#4b5563'
+                        }
+                    },
+                    tooltip: {
+                        backgroundColor: '#111827',
+                        titleFont: { size: 12, weight: '600' },
+                        bodyFont: { size: 12 },
+                        padding: 10,
+                        cornerRadius: 8,
+                        callbacks: {
+                            label: function (context) {
+                                const value = context.raw;
+                                const percent = total > 0 ? ((value / total) * 100).toFixed(1) : 0;
+                                return ' ' + value + ' orang' + (isCartesian ? '' : ' (' + percent + '%)');
+                            }
+                        }
+                    }
+                },
+                scales: isCartesian ? {
+                    y: {
+                        beginAtZero: true,
+                        ticks: { font: { size: 11 }, color: '#6b7280' },
+                        grid: { color: '#f3f4f6' }
+                    },
+                    x: {
+                        ticks: { autoSkip: false, font: { size: 11 }, color: '#374151', maxRotation: 0, minRotation: 0 },
+                        grid: { display: false }
+                    }
+                } : {}
+            }
+        });
+    });
+};
+
 // Nav mobile
 function initMobileMenu() {
     const mobileMenuButton = document.querySelector('[data-mobile-menu-button]');
@@ -1043,6 +1397,18 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (typeof window.initDosenStatusChart === 'function') {
         window.initDosenStatusChart(Chart);
+    }
+
+    if (typeof window.initAsetComboStackedChart === 'function') {
+        window.initAsetComboStackedChart(Chart);
+    }
+
+    if (typeof window.initKondisiBarChart === 'function') {
+        window.initKondisiBarChart(Chart);
+    }
+
+    if (typeof window.initPegawaiCharts === 'function') {
+        window.initPegawaiCharts(Chart);
     }
 
     initMobileMenu();

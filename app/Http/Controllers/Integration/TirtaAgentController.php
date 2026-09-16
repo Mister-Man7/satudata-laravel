@@ -163,165 +163,9 @@ class TirtaAgentController extends Controller
             ['role' => 'user', 'content' => $message],
         ];
 
-        // 4. Send request to OpenAI
-        $requestPayload = [
-            'model' => config('ai.providers.openai.models.text.default', 'gpt-4o-mini'),
-            'messages' => $messages,
-        ];
-        
-        if (!empty($openAiTools)) {
-            $requestPayload['tools'] = $openAiTools;
-        }
-
-        $response = Http::timeout(60)
-            ->acceptJson()
-            ->withToken(config('ai.providers.openai.key'))
-            ->post(rtrim((string) config('ai.providers.openai.url'), '/').'/chat/completions', $requestPayload)
-            ->throw()
-            ->json();
-
-        // Check if the response wants to call tools
-        $choice = data_get($response, 'choices.0.message');
-        $toolCalls = $choice['tool_calls'] ?? [];
-
-        if (!empty($toolCalls)) {
-            // A. Store the user's message in DB first
-            DB::transaction(function () use ($conversationsTable, $messagesTable, $conversationId, $participantId, $message): void {
-                $conversationExists = DB::table($conversationsTable)->where('id', $conversationId)->exists();
-                if ($conversationExists) {
-                    DB::table($conversationsTable)->where('id', $conversationId)->update(['updated_at' => now()]);
-                } else {
-                    DB::table($conversationsTable)->insert([
-                        'id' => $conversationId,
-                        'user_id' => $participantId,
-                        'title' => Str::limit($message, 100, preserveWords: true),
-                        'created_at' => now(),
-                        'updated_at' => now(),
-                    ]);
-                }
-                $this->storeConversationMessage($messagesTable, $conversationId, $participantId, 'user', $message);
-            });
-
-            // B. Store assistant tool-call message in DB
-            $assistantContent = $choice['content'] ?? '';
-            DB::transaction(function () use ($messagesTable, $conversationId, $participantId, $assistantContent, $toolCalls): void {
-                DB::table($messagesTable)->insert([
-                    'id' => (string) Str::uuid7(),
-                    'conversation_id' => $conversationId,
-                    'user_id' => $participantId,
-                    'agent' => TirtaAgent::class,
-                    'role' => 'assistant',
-                    'content' => $assistantContent,
-                    'attachments' => '[]',
-                    'tool_calls' => json_encode($toolCalls),
-                    'tool_results' => '[]',
-                    'usage' => '[]',
-                    'meta' => '[]',
-                    'created_at' => now(),
-                    'updated_at' => now(),
-                ]);
-            });
-
-            // Append assistant tool-call message to the API messages array
-            $messages[] = [
-                'role' => 'assistant',
-                'content' => $assistantContent === '' ? null : $assistantContent,
-                'tool_calls' => $toolCalls,
-            ];
-
-            // C. Execute each tool call and store the tool result message
-            foreach ($toolCalls as $toolCall) {
-                $callId = $toolCall['id'] ?? '';
-                $funcName = $toolCall['function']['name'] ?? '';
-                $funcArgs = json_decode($toolCall['function']['arguments'] ?? '{}', true) ?: [];
-
-                // Find matching tool
-                $toolOutput = '';
-                foreach ($tools as $t) {
-                    if (\Laravel\Ai\Tools\ToolNameResolver::resolve($t) === $funcName) {
-                        try {
-                            $toolOutput = (string) $t->handle(new \Laravel\Ai\Tools\Request($funcArgs));
-                        } catch (Throwable $e) {
-                            $toolOutput = json_encode(['error' => 'Tool execution failed: '.$e->getMessage()]);
-                        }
-                        break;
-                    }
-                }
-
-                if ($toolOutput === '') {
-                    $toolOutput = json_encode(['error' => 'Tool not found.']);
-                }
-
-                // Store tool result message in DB
-                DB::transaction(function () use ($messagesTable, $conversationId, $participantId, $toolOutput, $callId): void {
-                    DB::table($messagesTable)->insert([
-                        'id' => (string) Str::uuid7(),
-                        'conversation_id' => $conversationId,
-                        'user_id' => $participantId,
-                        'agent' => TirtaAgent::class,
-                        'role' => 'tool',
-                        'content' => $toolOutput,
-                        'attachments' => '[]',
-                        'tool_calls' => '[]',
-                        'tool_results' => '[]',
-                        'usage' => '[]',
-                        'meta' => json_encode(['tool_call_id' => $callId]),
-                        'created_at' => now(),
-                        'updated_at' => now(),
-                    ]);
-                });
-
-                // Append tool response to the API messages array
-                $messages[] = [
-                    'role' => 'tool',
-                    'tool_call_id' => $callId,
-                    'content' => $toolOutput,
-                ];
-            }
-
-            // D. Request final answer from OpenAI
-            $finalRequestPayload = [
-                'model' => config('ai.providers.openai.models.text.default', 'gpt-4o-mini'),
-                'messages' => $messages,
-            ];
-            if (!empty($openAiTools)) {
-                $finalRequestPayload['tools'] = $openAiTools;
-            }
-
-            $finalResponse = Http::timeout(60)
-                ->acceptJson()
-                ->withToken(config('ai.providers.openai.key'))
-                ->post(rtrim((string) config('ai.providers.openai.url'), '/').'/chat/completions', $finalRequestPayload)
-                ->throw()
-                ->json();
-
-            $answer = data_get($finalResponse, 'choices.0.message.content');
-
-            if (! is_string($answer) || trim($answer) === '') {
-                throw new \RuntimeException('OpenAI-compatible provider returned an empty response.');
-            }
-
-            // Store the final assistant answer in DB
-            DB::transaction(function () use ($messagesTable, $conversationId, $participantId, $answer): void {
-                $this->storeConversationMessage($messagesTable, $conversationId, $participantId, 'assistant', $answer);
-            });
-
-            return [
-                'message' => $answer,
-                'conversation_id' => $conversationId,
-            ];
-        }
-
-        // Standard flow when NO tool calls are returned by the AI
-        $answer = $choice['content'];
-
-        if (! is_string($answer) || trim($answer) === '') {
-            throw new \RuntimeException('OpenAI-compatible provider returned an empty response.');
-        }
-
-        DB::transaction(function () use ($conversationsTable, $messagesTable, $conversationId, $participantId, $message, $answer): void {
+        // Store user message in DB first
+        DB::transaction(function () use ($conversationsTable, $messagesTable, $conversationId, $participantId, $message): void {
             $conversationExists = DB::table($conversationsTable)->where('id', $conversationId)->exists();
-
             if ($conversationExists) {
                 DB::table($conversationsTable)->where('id', $conversationId)->update(['updated_at' => now()]);
             } else {
@@ -333,15 +177,125 @@ class TirtaAgentController extends Controller
                     'updated_at' => now(),
                 ]);
             }
-
             $this->storeConversationMessage($messagesTable, $conversationId, $participantId, 'user', $message);
-            $this->storeConversationMessage($messagesTable, $conversationId, $participantId, 'assistant', $answer);
+        });
+
+        $maxIterations = 5;
+        $iteration = 0;
+        $finalAnswer = null;
+
+        while ($iteration < $maxIterations) {
+            $iteration++;
+
+            $requestPayload = [
+                'model' => config('ai.providers.openai.models.text.default', 'gpt-4o-mini'),
+                'messages' => $messages,
+            ];
+            
+            if (!empty($openAiTools)) {
+                $requestPayload['tools'] = $openAiTools;
+            }
+
+            $response = Http::timeout(60)
+                ->acceptJson()
+                ->withToken(config('ai.providers.openai.key'))
+                ->post(rtrim((string) config('ai.providers.openai.url'), '/').'/chat/completions', $requestPayload)
+                ->throw()
+                ->json();
+
+            $choice = data_get($response, 'choices.0.message');
+            $toolCalls = $choice['tool_calls'] ?? [];
+
+            if (!empty($toolCalls)) {
+                $assistantContent = $choice['content'] ?? '';
+                DB::transaction(function () use ($messagesTable, $conversationId, $participantId, $assistantContent, $toolCalls): void {
+                    DB::table($messagesTable)->insert([
+                        'id' => (string) Str::uuid7(),
+                        'conversation_id' => $conversationId,
+                        'user_id' => $participantId,
+                        'agent' => TirtaAgent::class,
+                        'role' => 'assistant',
+                        'content' => $assistantContent,
+                        'attachments' => '[]',
+                        'tool_calls' => json_encode($toolCalls),
+                        'tool_results' => '[]',
+                        'usage' => '[]',
+                        'meta' => '[]',
+                        'created_at' => now(),
+                        'updated_at' => now(),
+                    ]);
+                });
+
+                $messages[] = [
+                    'role' => 'assistant',
+                    'content' => $assistantContent === '' ? null : $assistantContent,
+                    'tool_calls' => $toolCalls,
+                ];
+
+                foreach ($toolCalls as $toolCall) {
+                    $callId = $toolCall['id'] ?? '';
+                    $funcName = $toolCall['function']['name'] ?? '';
+                    $funcArgs = json_decode($toolCall['function']['arguments'] ?? '{}', true) ?: [];
+
+                    $toolOutput = '';
+                    foreach ($tools as $t) {
+                        if (\Laravel\Ai\Tools\ToolNameResolver::resolve($t) === $funcName) {
+                            try {
+                                $toolOutput = (string) $t->handle(new \Laravel\Ai\Tools\Request($funcArgs));
+                            } catch (Throwable $e) {
+                                $toolOutput = json_encode(['error' => 'Tool execution failed: '.$e->getMessage()]);
+                            }
+                            break;
+                        }
+                    }
+
+                    if ($toolOutput === '') {
+                        $toolOutput = json_encode(['error' => 'Tool not found.']);
+                    }
+
+                    DB::transaction(function () use ($messagesTable, $conversationId, $participantId, $toolOutput, $callId): void {
+                        DB::table($messagesTable)->insert([
+                            'id' => (string) Str::uuid7(),
+                            'conversation_id' => $conversationId,
+                            'user_id' => $participantId,
+                            'agent' => TirtaAgent::class,
+                            'role' => 'tool',
+                            'content' => $toolOutput,
+                            'attachments' => '[]',
+                            'tool_calls' => '[]',
+                            'tool_results' => '[]',
+                            'usage' => '[]',
+                            'meta' => json_encode(['tool_call_id' => $callId]),
+                            'created_at' => now(),
+                            'updated_at' => now(),
+                        ]);
+                    });
+
+                    $messages[] = [
+                        'role' => 'tool',
+                        'tool_call_id' => $callId,
+                        'content' => $toolOutput,
+                    ];
+                }
+            } else {
+                $finalAnswer = $choice['content'] ?? '';
+                break;
+            }
+        }
+
+        if (! is_string($finalAnswer) || trim($finalAnswer) === '') {
+            throw new \RuntimeException('OpenAI-compatible provider returned an empty response.');
+        }
+
+        DB::transaction(function () use ($messagesTable, $conversationId, $participantId, $finalAnswer): void {
+            $this->storeConversationMessage($messagesTable, $conversationId, $participantId, 'assistant', $finalAnswer);
         });
 
         return [
-            'message' => $answer,
+            'message' => $finalAnswer,
             'conversation_id' => $conversationId,
         ];
+
     }
 
     private function mapAgentToolsForOpenAi(iterable $tools): array

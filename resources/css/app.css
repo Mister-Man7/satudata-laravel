@@ -28,125 +28,240 @@
     display: none !important;
 }
 
-/* TirtaAgent Chat UI */
+/* TirtaAgent Chat UI - Modern ChatGPT Style */
 .tirta-quick-prompts {
     scrollbar-width: none;
 }
 .tirta-quick-prompts::-webkit-scrollbar {
     display: none;
 }
+
+/* Custom Scrollbar for Message Container */
+.tirta-messages-scroll {
+    scrollbar-width: thin;
+    scrollbar-color: #cbd5e1 transparent;
+}
+.tirta-messages-scroll::-webkit-scrollbar {
+    width: 6px;
+}
+.tirta-messages-scroll::-webkit-scrollbar-track {
+    background: transparent;
+}
+.tirta-messages-scroll::-webkit-scrollbar-thumb {
+    background-color: #cbd5e1;
+    border-radius: 9999px;
+}
+.tirta-messages-scroll::-webkit-scrollbar-thumb:hover {
+    background-color: #94a3b8;
+}
+
+/* Typing Indicator Animation */
 .tirta-typing-dots {
     display: inline-flex;
     align-items: center;
-    gap: 0.25rem;
+    gap: 0.3rem;
 }
 .tirta-typing-dots span {
-    width: 0.375rem;
-    height: 0.375rem;
+    width: 0.45rem;
+    height: 0.45rem;
     border-radius: 9999px;
-    background-color: #0891b2;
-    opacity: 0.35;
-    animation: tirtaTypingPulse 1s ease-in-out infinite;
+    background-color: #0ea5e9;
+    opacity: 0.4;
+    animation: tirtaTypingPulse 1.2s ease-in-out infinite;
 }
 .tirta-typing-dots span:nth-child(2) {
-    animation-delay: 0.15s;
+    animation-delay: 0.2s;
 }
 .tirta-typing-dots span:nth-child(3) {
-    animation-delay: 0.3s;
+    animation-delay: 0.4s;
 }
 @keyframes tirtaTypingPulse {
     0%, 80%, 100% {
         transform: translateY(0);
-        opacity: 0.35;
+        opacity: 0.4;
     }
     40% {
-        transform: translateY(-0.1875rem);
+        transform: translateY(-0.25rem);
         opacity: 1;
+        background-color: #0284c7;
     }
 }
 
-/* TirtaAgent Chat Markdown Styling */
+@keyframes tirtaFadeInUp {
+    from {
+        opacity: 0;
+        transform: translateY(8px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.animate-message-in {
+    animation: tirtaFadeInUp 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* TirtaAgent Chat Markdown Styling - Professional ChatGPT Style */
+.tirta-markdown-content {
+    color: #1e293b;
+    word-break: break-word;
+}
 .tirta-markdown-content p {
-    margin-bottom: 0.75rem;
+    margin-bottom: 0.875rem;
+    line-height: 1.625;
 }
 .tirta-markdown-content p:last-child {
     margin-bottom: 0;
 }
+.tirta-markdown-content h1, 
+.tirta-markdown-content h2, 
+.tirta-markdown-content h3, 
+.tirta-markdown-content h4 {
+    font-weight: 700;
+    color: #0f172a;
+    margin-top: 1rem;
+    margin-bottom: 0.5rem;
+}
+.tirta-markdown-content h1 { font-size: 1.25rem; }
+.tirta-markdown-content h2 { font-size: 1.125rem; }
+.tirta-markdown-content h3 { font-size: 1rem; }
+
 .tirta-markdown-content ul {
     list-style-type: disc;
     margin-left: 1.25rem;
-    margin-bottom: 0.75rem;
+    margin-bottom: 0.875rem;
 }
 .tirta-markdown-content ol {
     list-style-type: decimal;
     margin-left: 1.25rem;
-    margin-bottom: 0.75rem;
+    margin-bottom: 0.875rem;
 }
 .tirta-markdown-content li {
-    margin-bottom: 0.25rem;
+    margin-bottom: 0.35rem;
+    line-height: 1.5;
 }
 .tirta-markdown-content li::marker {
-    color: #06b6d4; /* cyan-500 */
+    color: #0284c7;
 }
 .tirta-markdown-content strong {
     font-weight: 700;
-    color: #0f172a; /* slate-900 */
+    color: #0f172a;
 }
 .tirta-markdown-content a {
-    color: #0891b2; /* cyan-600 */
+    color: #0284c7;
     text-decoration: underline;
     font-weight: 600;
+    transition: color 0.15s ease;
 }
 .tirta-markdown-content a:hover {
-    color: #0e7490; /* cyan-700 */
+    color: #0369a1;
+}
+
+/* ChatGPT Style Tables */
+.tirta-markdown-content .table-wrapper {
+    width: 100%;
+    overflow-x: auto;
+    margin-top: 0.875rem;
+    margin-bottom: 0.875rem;
+    border-radius: 0.75rem;
+    border: 1px solid #e2e8f0;
+    box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
 }
 .tirta-markdown-content table {
     width: 100%;
     border-collapse: collapse;
-    margin-top: 0.75rem;
-    margin-bottom: 0.75rem;
     font-size: 0.8125rem;
-    line-height: 1.25rem;
+    line-height: 1.35rem;
+    background-color: #ffffff;
 }
 .tirta-markdown-content th {
-    background-color: #f1f5f9; /* slate-100 */
-    border: 1px solid #e2e8f0; /* slate-200 */
-    padding: 0.5rem;
+    background-color: #f8fafc;
+    border-bottom: 2px solid #e2e8f0;
+    padding: 0.625rem 0.875rem;
     font-weight: 700;
     text-align: left;
-    color: #334155; /* slate-700 */
+    color: #334155;
+    text-transform: uppercase;
+    font-size: 0.7rem;
+    letter-spacing: 0.05em;
 }
 .tirta-markdown-content td {
-    border: 1px solid #e2e8f0; /* slate-200 */
-    padding: 0.5rem;
-    color: #475569; /* slate-600 */
+    border-bottom: 1px solid #f1f5f9;
+    padding: 0.625rem 0.875rem;
+    color: #475569;
 }
-.tirta-markdown-content tr:nth-child(even) {
-    background-color: #f8fafc; /* slate-50 */
+.tirta-markdown-content tr:last-child td {
+    border-bottom: none;
 }
+.tirta-markdown-content tr:hover td {
+    background-color: #f8fafc;
+}
+
+/* Inline Code & Code Block Styling */
 .tirta-markdown-content code {
-    background-color: #f1f5f9; /* slate-100 */
-    padding: 0.125rem 0.25rem;
-    border-radius: 0.25rem;
-    font-family: monospace;
-    font-size: 0.875em;
-    color: #0f172a; /* slate-900 */
+    background-color: #f1f5f9;
+    padding: 0.15rem 0.35rem;
+    border-radius: 0.375rem;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    font-size: 0.85em;
+    color: #0284c7;
+    border: 1px solid #e2e8f0;
 }
-.tirta-markdown-content pre {
-    background-color: #0f172a; /* slate-900 */
-    color: #f8fafc; /* slate-50 */
+
+/* Code Block Wrapper with Header & Copy Button */
+.tirta-code-block {
+    margin-top: 0.875rem;
+    margin-bottom: 0.875rem;
+    border-radius: 0.75rem;
+    overflow: hidden;
+    background-color: #0f172a;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+}
+.tirta-code-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.5rem 0.875rem;
+    background-color: #1e293b;
+    border-bottom: 1px solid #334155;
+    color: #94a3b8;
+    font-size: 0.75rem;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-weight: 600;
+}
+.tirta-code-header button {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.2rem 0.5rem;
+    border-radius: 0.375rem;
+    background-color: transparent;
+    color: #cbd5e1;
+    font-size: 0.75rem;
+    transition: all 0.15s ease;
+    cursor: pointer;
+}
+.tirta-code-header button:hover {
+    background-color: #334155;
+    color: #ffffff;
+}
+.tirta-code-block pre {
+    margin: 0;
     padding: 1rem;
-    border-radius: 0.5rem;
     overflow-x: auto;
-    margin-top: 0.75rem;
-    margin-bottom: 0.75rem;
+    background-color: #0f172a;
+    color: #f8fafc;
 }
-.tirta-markdown-content pre code {
+.tirta-code-block pre code {
     background-color: transparent;
     padding: 0;
+    border: none;
     color: inherit;
-    font-size: inherit;
+    font-size: 0.85rem;
+    line-height: 1.5;
 }
+
 .alert-info {
     color: #205872;
     background-color: #d8f1f8;
@@ -160,3 +275,4 @@
     border: 1px solid transparent;
     border-radius: .25rem;
 }
+
