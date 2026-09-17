@@ -7,6 +7,7 @@ use App\Services\DTO\ApiResponse;
 use App\Services\Integrations\SimpegPegawaiService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\Http;
 use Illuminate\View\View;
 
@@ -27,20 +28,24 @@ class PegawaiController extends Controller
     public function index(Request $request): View
     {
         $response = $this->pegawaiService->getData();
-        $allPegawai = collect($response->data ?? []);
+        $raw = $response->data ?? [];
+        if (is_array($raw) && isset($raw['data']) && is_array($raw['data'])) {
+            $raw = $raw['data'];
+        }
+        $allPegawai = collect($raw);
 
         $statusPegawai = $this->buildStatusCards($allPegawai);
         $datas = $this->buildWorkStatusCards($allPegawai);
         $levelPegawai = $this->buildLevelCards($allPegawai);
 
         $guruBesar = $allPegawai->filter(function ($p) {
-            $j = $p['jabatan'] ?? '';
-            $n = $p['namaPegawai'] ?? $p['nama'] ?? '';
-            $g = $p['gelarDepan'] ?? '';
+            $j = $p['nama_jabatan'] ?? $p['jabatan'] ?? '';
+            $n = $p['nama_pegawai_lengkap'] ?? $p['nama_pegawai'] ?? $p['namaPegawai'] ?? $p['nama'] ?? '';
+            $g = $p['gelar_depan'] ?? $p['gelarDepan'] ?? '';
             return stripos($j, 'Profesor') !== false || stripos($j, 'Guru Besar') !== false || stripos($n, 'Prof.') !== false || stripos($g, 'Prof') !== false;
         })->count();
 
-        $countsLevel = $allPegawai->groupBy(fn($p) => trim($p['levelPegawai'] ?? 'Lainnya'))->map->count();
+        $countsLevel = $allPegawai->groupBy(fn($p) => trim($p['nama_level_pegawai'] ?? $p['levelPegawai'] ?? 'Lainnya'))->map->count();
 
         $daftarStatistik = [
             [
@@ -138,11 +143,11 @@ class PegawaiController extends Controller
     private function buildStatusCards($allPegawai): array
     {
         $counts = $allPegawai->groupBy(function ($p) {
-            $sp = trim($p['statusPegawai'] ?? '');
+            $sp = trim($p['nama_stspeg'] ?? $p['statusPegawai'] ?? '');
             if (!empty($sp) && $sp !== 'Aktif') {
                 return $sp;
             }
-            return trim($p['statusKerja'] ?? 'PNS');
+            return trim($p['nama_stspegawai'] ?? $p['statusKerja'] ?? 'PNS');
         })->map->count();
 
         $cards = [];
@@ -156,24 +161,27 @@ class PegawaiController extends Controller
 
     private function buildWorkStatusCards($allPegawai): array
     {
-        $counts = $allPegawai->groupBy(fn($p) => trim($p['statusKerja'] ?? 'Lainnya'))->map->count();
+        $counts = $allPegawai->groupBy(fn($p) => trim($p['nama_stspegawai'] ?? $p['statusKerja'] ?? 'Lainnya'))->map->count();
 
-        return [
-            $this->makeWorkStatusCard('PNS', $counts->get('PNS', 0)),
-            $this->makeWorkStatusCard('PPPK', $counts->get('PPPK', 0)),
-            $this->makeWorkStatusCard('Honorer', $counts->get('Honorer', 0)),
-            $this->makeWorkStatusCard('BLU', $counts->get('BLU', 0)),
-            $this->makeWorkStatusCard('PKWT', $counts->get('PKWT', 0)),
-            $this->makeWorkStatusCard('PPPK Paruh Waktu', $counts->get('PPPK Paruh Waktu', 0)),
-            $this->makeWorkStatusCard('Outsourcing', $counts->get('Outsourcing', 0)),
-            $this->makeWorkStatusCard('Non BLU', $counts->get('Non BLU', 0)),
-            $this->makeWorkStatusCard('CPNS', $counts->get('CPNS', 0)),
-        ];
+        $standardLabels = ['PNS', 'PPPK', 'Honorer', 'BLU', 'PKWT', 'PPPK Paruh Waktu', 'Outsourcing', 'Non BLU', 'CPNS'];
+        $cards = [];
+
+        foreach ($standardLabels as $label) {
+            $cards[] = $this->makeWorkStatusCard($label, $counts->get($label, 0));
+        }
+
+        foreach ($counts as $label => $count) {
+            if (!in_array($label, $standardLabels, true) && !empty($label) && $label !== 'Lainnya' && $count > 0) {
+                $cards[] = $this->makeWorkStatusCard($label, $count);
+            }
+        }
+
+        return $cards;
     }
 
     private function buildLevelCards($allPegawai): array
     {
-        $counts = $allPegawai->groupBy(fn($p) => trim($p['levelPegawai'] ?? 'Lainnya'))->map->count();
+        $counts = $allPegawai->groupBy(fn($p) => trim($p['nama_level_pegawai'] ?? $p['levelPegawai'] ?? 'Lainnya'))->map->count();
 
         $tendik = $counts->get('Tenaga Kependidikan', 0) + $counts->get('Tendik', 0);
         $dosen = $counts->get('Dosen', 0);
@@ -547,5 +555,133 @@ class PegawaiController extends Controller
         }
         
         return 0;
+    }
+
+    /**
+     * [Direktori Profil Dosen]: Menampilkan daftar profil dosen dengan fitur
+     * pencarian (nama, NIP, fakultas, jabatan) dan filter fakultas/jabatan.
+     */
+    public function profilDosenIndex(Request $request): View
+    {
+        // Ambil data dosen (Local-First dari database MySQL pegawais)
+        $response = $this->pegawaiService->getDataDosen();
+        $raw = $response->data ?? [];
+        if (is_array($raw) && isset($raw['data']) && is_array($raw['data'])) {
+            $raw = $raw['data'];
+        }
+        $collection = collect($raw);
+
+        // Agregasi statistik jabatan akademik dosen
+        $totalDosen = $collection->count();
+        $totalGuruBesar = $collection->filter(function ($p) {
+            $j = trim($p['nama_jabatan'] ?? $p['jabatan'] ?? '');
+            $n = trim($p['nama_pegawai_lengkap'] ?? $p['nama_pegawai'] ?? '');
+            return strcasecmp($j, 'Guru Besar') === 0 || stripos($j, 'Guru Besar') !== false || stripos($j, 'Profesor') !== false || stripos($n, 'Prof.') !== false;
+        })->count();
+        $totalLektorKepala = $collection->filter(function ($p) {
+            $j = trim($p['nama_jabatan'] ?? $p['jabatan'] ?? '');
+            return stripos($j, 'Lektor Kepala') !== false;
+        })->count();
+        $totalLektor = $collection->filter(function ($p) {
+            $j = trim($p['nama_jabatan'] ?? $p['jabatan'] ?? '');
+            return stripos($j, 'Lektor') !== false && stripos($j, 'Lektor Kepala') === false;
+        })->count();
+        $totalAsistenAhli = $collection->filter(function ($p) {
+            $j = trim($p['nama_jabatan'] ?? $p['jabatan'] ?? '');
+            return stripos($j, 'Asisten Ahli') !== false;
+            
+        })->count();
+
+        // Search & filter
+        $search = trim((string) $request->input('search', ''));
+        $selectedJabatan = trim((string) $request->input('jabatan', ''));
+        $selectedStatusKerja = trim((string) $request->input('status_kerja', ''));
+
+        // Filter options - ambil langsung dari kolom unik di data API
+        $statusKerjaOptions = $collection->map(fn($p) => trim($p['nama_stspegawai'] ?? $p['statusKerja'] ?? ''))->filter()->unique()->sort()->values()->all();
+        $jabatanOptions = $collection->map(fn($p) => trim($p['nama_jabatan'] ?? $p['jabatan'] ?? ''))->filter()->unique()->sort()->values()->all();
+
+        // Calculate faculty counts across all lecturers
+        $facultyCounts = [];
+        foreach ($raw as $p) {
+            $f = trim($p['unitKerja'] ?? $p['unit_kerja'] ?? '');
+            if (!empty($f)) {
+                $facultyCounts[$f] = ($facultyCounts[$f] ?? 0) + 1;
+            }
+        }
+        arsort($facultyCounts);
+        $facultyOptions = array_keys($facultyCounts);
+
+        $selectedFakultas = trim((string) $request->input('fakultas', ''));
+
+        if (!empty($search)) {
+            $qLower = mb_strtolower($search);
+            $collection = $collection->filter(function ($p) use ($qLower) {
+                $nama = mb_strtolower($p['nama_pegawai_lengkap'] ?? $p['nama_pegawai'] ?? '');
+                $nip = mb_strtolower($p['nip'] ?? '');
+                $jabatan = mb_strtolower($p['nama_jabatan'] ?? $p['jabatan'] ?? '');
+                $nik = mb_strtolower($p['nik'] ?? '');
+                $kd = mb_strtolower($p['kd_pegawai'] ?? $p['kodeData'] ?? '');
+                $fakultas = mb_strtolower($p['unitKerja'] ?? $p['unit_kerja'] ?? '');
+                return str_contains($nama, $qLower) || str_contains($nip, $qLower) || str_contains($jabatan, $qLower) || str_contains($nik, $qLower) || str_contains($kd, $qLower) || str_contains($fakultas, $qLower);
+            });
+        }
+
+        if (!empty($selectedFakultas)) {
+            $collection = $collection->filter(function ($p) use ($selectedFakultas) {
+                $u = trim($p['unitKerja'] ?? $p['unit_kerja'] ?? '');
+                return strcasecmp($u, $selectedFakultas) === 0;
+            });
+        }
+
+        if (!empty($selectedJabatan)) {
+            $collection = $collection->filter(function ($p) use ($selectedJabatan) {
+                $j = trim($p['nama_jabatan'] ?? $p['jabatan'] ?? '');
+                if ($selectedJabatan === 'Guru Besar') {
+                    return strcasecmp($j, 'Guru Besar') === 0 || stripos($j, 'Profesor') !== false || stripos($j, 'Guru Besar') !== false;
+                }
+                return strcasecmp($j, $selectedJabatan) === 0 || stripos($j, $selectedJabatan) !== false;
+            });
+        }
+
+        if (!empty($selectedStatusKerja)) {
+            $collection = $collection->filter(function ($p) use ($selectedStatusKerja) {
+                $st = trim($p['nama_stspegawai'] ?? $p['statusKerja'] ?? '');
+                return strcasecmp($st, $selectedStatusKerja) === 0;
+            });
+        }
+
+        $totalFiltered = $collection->count();
+        $page = max(1, (int) $request->input('page', 1));
+        $perPage = 20;
+        $offset = ($page - 1) * $perPage;
+        $paginatedItems = $collection->slice($offset, $perPage)->values()->all();
+
+        $paginatedDosen = new LengthAwarePaginator(
+            $paginatedItems,
+            $totalFiltered,
+            $perPage,
+            $page,
+            ['path' => $request->url(), 'query' => $request->query()]
+        );
+
+        return view('Pegawai.profil-dosen-index', [
+            'title' => 'Profil Dosen',
+            'dosens' => $paginatedDosen,
+            'facultyOptions' => $facultyOptions,
+            'facultyCounts' => $facultyCounts,
+            'selectedFakultas' => $selectedFakultas,
+            'totalDosen' => $totalDosen,
+            'totalGuruBesar' => $totalGuruBesar,
+            'totalLektorKepala' => $totalLektorKepala,
+            'totalLektor' => $totalLektor,
+            'totalAsistenAhli' => $totalAsistenAhli,
+            'totalFiltered' => $totalFiltered,
+            'search' => $search,
+            'selectedJabatan' => $selectedJabatan,
+            'selectedStatusKerja' => $selectedStatusKerja,
+            'statusKerjaOptions' => $statusKerjaOptions,
+            'jabatanOptions' => $jabatanOptions,
+        ]);
     }
 }

@@ -26,10 +26,25 @@ class SiakangPenjadwalanService extends AbstractApiClient
     /**
      * Ambil data penjadwalan dosen (cached).
      *
-     * @param  array{semester?: string, nip?: string}  $params
+     * @param  array{semester: string, nip: string}  $params
      */
     public function getData(array $params = []): ApiResponse
     {
+        $semester = trim((string) ($params['semester'] ?? request()->input('semester', '')));
+        $nip = trim((string) ($params['nip'] ?? ''));
+
+        if (empty($semester) || empty($nip)) {
+            return new ApiResponse(
+                success: false,
+                status: 422,
+                message: 'Parameter semester dan nip wajib ada untuk mengambil data penjadwalan dosen.',
+                data: [],
+            );
+        }
+
+        $params['semester'] = $semester;
+        $params['nip'] = $nip;
+
         $cacheKey = 'siakang.penjadwalan.' . md5(json_encode($params));
 
         if (Cache::has($cacheKey)) {

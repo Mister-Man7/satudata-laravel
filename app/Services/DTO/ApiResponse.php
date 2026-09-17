@@ -10,7 +10,7 @@ use Illuminate\Http\Client\Response;
  * Controller HANYA boleh berinteraksi dengan object ini,
  * tidak boleh mengakses HTTP response secara langsung.
  */
-final class ApiResponse
+final class ApiResponse implements \ArrayAccess
 {
     public function __construct(
         public readonly bool $success,
@@ -22,6 +22,29 @@ final class ApiResponse
         public readonly ?string $rawMessage = null,
         public readonly ?array $rawBody = null,
     ) {}
+
+    public function offsetExists(mixed $offset): bool
+    {
+        return property_exists($this, (string)$offset) || $offset === 'status_code';
+    }
+
+    public function offsetGet(mixed $offset): mixed
+    {
+        if ($offset === 'status_code') {
+            return $this->status;
+        }
+        return $this->{$offset} ?? null;
+    }
+
+    public function offsetSet(mixed $offset, mixed $value): void
+    {
+        // Immutable DTO
+    }
+
+    public function offsetUnset(mixed $offset): void
+    {
+        // Immutable DTO
+    }
 
     /**
      * Buat ApiResponse dari HTTP response yang berhasil (2xx).
