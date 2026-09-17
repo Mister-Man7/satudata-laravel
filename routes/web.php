@@ -34,6 +34,12 @@ Route::prefix('aset')->name('aset.')->group(function () {
 
 Route::get('/pegawai', [PegawaiController::class, 'index'])
     ->name('pegawai');
+Route::get('/pegawai/profil-dosen', [PegawaiController::class, 'profilDosenIndex'])
+    ->name('pegawai.profil-dosen');
+Route::get('/pegawai/profil-dosen/{nip}', [\App\Http\Controllers\Academic\DosenProfileController::class, 'show'])
+    ->name('pegawai.profil-dosen.show');
+Route::get('/pegawai/profil-dosen/{nip}/sipp-metrics', [\App\Http\Controllers\Academic\DosenProfileController::class, 'sippMetrics'])
+    ->name('pegawai.profil-dosen.sipp-metrics');
 
 Route::get('/infrastruktur', function () {
     return view('Integration.infrastruktur', ['title' => 'Infrastruktur']);

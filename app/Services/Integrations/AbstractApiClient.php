@@ -151,13 +151,13 @@ abstract class AbstractApiClient
         // Terapkan auth berdasarkan tipe
         $authType = $config['auth_type'] ?? null;
 
-        match ($authType) {
-            'token' => $request->withToken($config['token'] ?? ''),
-            'api_key' => $request->withQueryParameters([
+        $request = match ($authType) {
+            'token'        => $request->withToken($config['token'] ?? ''),
+            'api_key'      => $request->withQueryParameters([
                 $config['api_key_header'] ?? '' => $config['api_key_value'] ?? '',
             ]),
             'bearer_login' => $request->withToken($this->getBearerToken($config)),
-            default => null,
+            default        => $request,
         };
 
         return $request;
