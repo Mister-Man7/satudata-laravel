@@ -49,7 +49,7 @@ class SiakangMataKuliahService extends AbstractApiClient
     /**
      * Fetch all items across all pages for a given endpoint.
      */
-    public function getAllItems(string $endpoint, array $params = []): array
+    public function getAllItems(string $endpoint, array $params = [], int $maxPages = 20): array
     {
         $items = [];
         $page = 1;
@@ -75,7 +75,7 @@ class SiakangMataKuliahService extends AbstractApiClient
 
             $lastPage = (int)($meta['last_page'] ?? $page);
             $page++;
-        } while ($page <= $lastPage);
+        } while ($page <= $lastPage && $page <= $maxPages);
 
         return array_values($items);
     }

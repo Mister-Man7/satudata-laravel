@@ -109,6 +109,27 @@ class SimantapService extends AbstractApiClient
     }
 
     /**
+     * Ambil daftar lokasi unik teragregasi langsung dari MySQL (hanya ~350 baris dari total 97.715 data).
+     * Mencegah fatal error memory exhaustion (128MB limit) pada PHP.
+     */
+    protected function getDistinctLocations(): array
+    {
+        return Cache::remember('simantap_distinct_locations_v3', now()->addHours(6), function () {
+            return \Illuminate\Support\Facades\DB::table('asets')
+                ->select('lokasi_lengkap', \Illuminate\Support\Facades\DB::raw('COUNT(*) as total'))
+                ->whereNotNull('lokasi_lengkap')
+                ->where('lokasi_lengkap', '!=', '-')
+                ->groupBy('lokasi_lengkap')
+                ->get()
+                ->map(fn($item) => [
+                    'lokasi_lengkap' => (string)($item->lokasi_lengkap ?? ''),
+                    'total' => (int)($item->total ?? 0),
+                ])
+                ->all();
+        });
+    }
+
+    /**
      * Data fallback dinamis dari 97.715 data BMN riil di database (`App\Models\Aset`).
      * Dikelompokkan per Kampus, Gedung, dan Ruangan secara otomatis.
      */
@@ -119,49 +140,52 @@ class SimantapService extends AbstractApiClient
         // 1. Kampus list (kampus, kampus/by-satker) - Agregasi dinamis per Kampus dari 97.715 data Aset
         if ($ep === 'kampus' || str_starts_with($ep, 'kampus/by-satker')) {
             try {
-                $kampusMap = [
-                    'KAMPUS-SINDANGSARI' => ['nama' => 'Kampus Sindangsari', 'keyword' => 'Sindangsari', 'count' => 0],
-                    'KAMPUS-PAKUPATAN' => ['nama' => 'Kampus Pakupatan', 'keyword' => 'Pakupatan', 'count' => 0],
-                    'KAMPUS-KEPANDEAN' => ['nama' => 'Kampus Kepandean', 'keyword' => 'Kepandean', 'count' => 0],
-                    'KAMPUS-CILEGON' => ['nama' => 'Kampus Cilegon', 'keyword' => 'Cilegon', 'count' => 0],
-                    'KAMPUS-CIWARU' => ['nama' => 'Kampus Ciwaru', 'keyword' => 'Ciwaru', 'count' => 0],
-
-                ];
-
-                $all = \App\Models\Aset::select('lokasi_lengkap')->get();
-                foreach ($all as $row) {
-                    $lok = $row->lokasi_lengkap ?? '';
-                    $matched = false;
-                    foreach ($kampusMap as $kId => &$kData) {
-                        if (stripos($lok, $kData['keyword']) !== false) {
-                            $kData['count']++;
-                            $matched = true;
-                            break;
-                        }
-                    }
-                    if (!$matched) {
-                        $kampusMap['KAMPUS-SINDANGSARI']['count']++;
-                    }
-                }
-                unset($kData);
-
-
-                $kampusList = [];
-                foreach ($kampusMap as $kId => $kData) {
-                    $kampusList[] = [
-                        'id_kampus' => $kId,
-                        'nama_kampus' => $kData['nama'],
-                        'total_aset' => $kData['count'],
-                        'updated_at' => now()->toDateTimeString(),
+                return Cache::remember('simantap_kampus_summary_v3', now()->addHours(6), function () {
+                    $kampusMap = [
+                        'KAMPUS-SINDANGSARI' => ['nama' => 'Kampus Sindangsari', 'keyword' => 'Sindangsari', 'count' => 0],
+                        'KAMPUS-PAKUPATAN' => ['nama' => 'Kampus Pakupatan', 'keyword' => 'Pakupatan', 'count' => 0],
+                        'KAMPUS-KEPANDEAN' => ['nama' => 'Kampus Kepandean', 'keyword' => 'Kepandean', 'count' => 0],
+                        'KAMPUS-CILEGON' => ['nama' => 'Kampus Cilegon', 'keyword' => 'Cilegon', 'count' => 0],
+                        'KAMPUS-CIWARU' => ['nama' => 'Kampus Ciwaru', 'keyword' => 'Ciwaru', 'count' => 0],
                     ];
-                }
 
-                return [
-                    'data' => [
-                        'data' => $kampusList,
-                        'total' => count($kampusList),
-                    ]
-                ];
+                    $totalAll = \Illuminate\Support\Facades\DB::table('asets')->count();
+                    $sumOther = 0;
+
+                    $distinct = $this->getDistinctLocations();
+                    foreach ($distinct as $row) {
+                        $lok = is_array($row) ? ($row['lokasi_lengkap'] ?? '') : ($row->lokasi_lengkap ?? '');
+                        $cnt = (int)(is_array($row) ? ($row['total'] ?? 0) : ($row->total ?? 0));
+                        foreach ($kampusMap as $kId => &$kData) {
+                            if ($kId === 'KAMPUS-SINDANGSARI') continue;
+                            if (stripos($lok, $kData['keyword']) !== false) {
+                                $kData['count'] += $cnt;
+                                $sumOther += $cnt;
+                                break;
+                            }
+                        }
+                        unset($kData);
+                    }
+
+                    $kampusMap['KAMPUS-SINDANGSARI']['count'] = max(0, $totalAll - $sumOther);
+
+                    $kampusList = [];
+                    foreach ($kampusMap as $kId => $kData) {
+                        $kampusList[] = [
+                            'id_kampus' => $kId,
+                            'nama_kampus' => $kData['nama'],
+                            'total_aset' => $kData['count'],
+                            'updated_at' => now()->toDateTimeString(),
+                        ];
+                    }
+
+                    return [
+                        'data' => [
+                            'data' => $kampusList,
+                            'total' => count($kampusList),
+                        ]
+                    ];
+                });
             } catch (\Throwable $e) {
                 // Fallthrough
             }
@@ -180,18 +204,37 @@ class SimantapService extends AbstractApiClient
             elseif (str_contains($kampusId, 'CIWARU')) { $kw = 'Ciwaru'; $namaK = 'Kampus Ciwaru'; }
 
             try {
-                $rows = \App\Models\Aset::select('lokasi_lengkap')
-                    ->where('lokasi_lengkap', 'like', "%{$kw}%")
-                    ->get();
-
+                $distinct = $this->getDistinctLocations();
                 $gedungCounts = [];
-                foreach ($rows as $r) {
-                    $lParts = array_map('trim', explode('-', $r->lokasi_lengkap ?? ''));
-                    $gName = $lParts[1] ?? 'Gedung Utama';
-                    if (!isset($gedungCounts[$gName])) {
-                        $gedungCounts[$gName] = 0;
+
+                foreach ($distinct as $r) {
+                    $lok = is_array($r) ? ($r['lokasi_lengkap'] ?? '') : ($r->lokasi_lengkap ?? '');
+                    $total = (int)(is_array($r) ? ($r['total'] ?? 0) : ($r->total ?? 0));
+
+                    $matched = false;
+                    if (stripos($lok, $kw) !== false) {
+                        $matched = true;
+                    } elseif ($kampusId === 'KAMPUS-SINDANGSARI') {
+                        $isOther = false;
+                        foreach (['Pakupatan', 'Kepandean', 'Cilegon', 'Ciwaru'] as $otherKw) {
+                            if (stripos($lok, $otherKw) !== false) {
+                                $isOther = true;
+                                break;
+                            }
+                        }
+                        if (!$isOther) {
+                            $matched = true;
+                        }
                     }
-                    $gedungCounts[$gName]++;
+
+                    if ($matched) {
+                        $lParts = array_map('trim', explode('-', $lok));
+                        $gName = $lParts[1] ?? 'Gedung Utama';
+                        if (empty($gName) || $gName === '-') {
+                            $gName = 'Gedung Rektorat / Utama';
+                        }
+                        $gedungCounts[$gName] = ($gedungCounts[$gName] ?? 0) + $total;
+                    }
                 }
 
                 $gedungList = [];
@@ -224,27 +267,47 @@ class SimantapService extends AbstractApiClient
                 $parts = explode('/', $ep);
                 $kampusId = strtoupper(end($parts));
 
-                $kw = '';
+                $kw = 'Sindangsari';
                 if (str_contains($kampusId, 'PAKUPATAN')) $kw = 'Pakupatan';
                 elseif (str_contains($kampusId, 'KEPANDEAN')) $kw = 'Kepandean';
                 elseif (str_contains($kampusId, 'CILEGON')) $kw = 'Cilegon';
                 elseif (str_contains($kampusId, 'CIWARU')) $kw = 'Ciwaru';
-                elseif (str_contains($kampusId, 'SINDANGSARI')) $kw = 'Sindangsari';
 
-                $query = \App\Models\Aset::select('lokasi_lengkap')->whereNotNull('lokasi_lengkap');
-                if (!empty($kw)) {
-                    $query->where('lokasi_lengkap', 'like', "%{$kw}%");
-                }
-                $rows = $query->get();
-
+                $distinct = $this->getDistinctLocations();
                 $gedungCounts = [];
-                foreach ($rows as $r) {
-                    $lParts = array_map('trim', explode('-', $r->lokasi_lengkap ?? ''));
-                    $gName = $lParts[1] ?? 'Gedung Utama';
-                    if (!isset($gedungCounts[$gName])) {
-                        $gedungCounts[$gName] = 0;
+
+                foreach ($distinct as $r) {
+                    $lok = is_array($r) ? ($r['lokasi_lengkap'] ?? '') : ($r->lokasi_lengkap ?? '');
+                    $total = (int)(is_array($r) ? ($r['total'] ?? 0) : ($r->total ?? 0));
+
+                    $matched = false;
+                    if (str_contains($kampusId, 'KAMPUS-')) {
+                        if (stripos($lok, $kw) !== false) {
+                            $matched = true;
+                        } elseif (str_contains($kampusId, 'SINDANGSARI')) {
+                            $isOther = false;
+                            foreach (['Pakupatan', 'Kepandean', 'Cilegon', 'Ciwaru'] as $otherKw) {
+                                if (stripos($lok, $otherKw) !== false) {
+                                    $isOther = true;
+                                    break;
+                                }
+                            }
+                            if (!$isOther) {
+                                $matched = true;
+                            }
+                        }
+                    } else {
+                        $matched = true;
                     }
-                    $gedungCounts[$gName]++;
+
+                    if ($matched) {
+                        $lParts = array_map('trim', explode('-', $lok));
+                        $gName = $lParts[1] ?? 'Gedung Utama';
+                        if (empty($gName) || $gName === '-') {
+                            $gName = 'Gedung Rektorat / Utama';
+                        }
+                        $gedungCounts[$gName] = ($gedungCounts[$gName] ?? 0) + $total;
+                    }
                 }
 
                 $gedungList = [];
@@ -253,6 +316,7 @@ class SimantapService extends AbstractApiClient
                     $gedungList[] = [
                         'id_gedung' => $gSlug,
                         'nama_gedung' => $gName,
+                        'id_kampus' => $kampusId,
                         'total_aset' => $count,
                         'updated_at' => now()->toDateTimeString(),
                     ];
@@ -274,20 +338,23 @@ class SimantapService extends AbstractApiClient
             try {
                 $parts = explode('/', $ep);
                 $gedungSlug = end($parts);
+                $targetGedung = trim(str_replace(['GEDUNG-', '-'], [' ', ' '], $gedungSlug));
 
-                $rows = \App\Models\Aset::select('lokasi_lengkap')->whereNotNull('lokasi_lengkap')->limit(2000)->get();
-
+                $distinct = $this->getDistinctLocations();
                 $ruanganCounts = [];
-                foreach ($rows as $r) {
-                    $lParts = array_map('trim', explode('-', $r->lokasi_lengkap ?? ''));
-                    $rName = end($lParts);
-                    if (empty($rName) || $rName === '-') {
-                        $rName = 'Ruang Operasional';
+
+                foreach ($distinct as $r) {
+                    $lok = is_array($r) ? ($r['lokasi_lengkap'] ?? '') : ($r->lokasi_lengkap ?? '');
+                    $total = (int)(is_array($r) ? ($r['total'] ?? 0) : ($r->total ?? 0));
+
+                    if (empty($targetGedung) || $targetGedung === 'RUANGAN' || stripos($lok, $targetGedung) !== false) {
+                        $lParts = array_map('trim', explode('-', $lok));
+                        $rName = end($lParts);
+                        if (empty($rName) || $rName === '-') {
+                            $rName = 'Ruang Operasional';
+                        }
+                        $ruanganCounts[$rName] = ($ruanganCounts[$rName] ?? 0) + $total;
                     }
-                    if (!isset($ruanganCounts[$rName])) {
-                        $ruanganCounts[$rName] = 0;
-                    }
-                    $ruanganCounts[$rName]++;
                 }
 
                 $ruanganList = [];
@@ -324,31 +391,40 @@ class SimantapService extends AbstractApiClient
                 if (str_contains($ep, 'by-ruangan/')) {
                     $parts = explode('/', $ep);
                     $targetId = urldecode(end($parts));
-                    $searchTerm = trim(str_replace(['RUANG-', 'GEDUNG-', 'KAMPUS-', '-'], [' ', ' ', ' ', ' '], $targetId));
-                    if (!empty($searchTerm)) {
-                        $query->where(function ($q) use ($targetId, $searchTerm) {
+                    $clean = preg_replace('/^(RUANG|GEDUNG|KAMPUS)-/i', '', $targetId);
+                    $words = array_values(array_filter(explode('-', $clean), fn($w) => strlen(trim($w)) > 0));
+                    $likePattern = !empty($words) ? ('%' . implode('%', $words) . '%') : '';
+
+                    if (!empty($likePattern)) {
+                        $query->where(function ($q) use ($targetId, $likePattern) {
                             $q->where('id_ruangan', $targetId)
-                              ->orWhere('lokasi_lengkap', 'like', "%{$searchTerm}%");
+                              ->orWhere('lokasi_lengkap', 'like', $likePattern);
                         });
                     }
                 } elseif (str_contains($ep, 'by-gedung/')) {
                     $parts = explode('/', $ep);
                     $targetId = urldecode(end($parts));
-                    $searchTerm = trim(str_replace(['GEDUNG-', 'KAMPUS-', '-'], [' ', ' ', ' '], $targetId));
-                    if (!empty($searchTerm)) {
-                        $query->where(function ($q) use ($targetId, $searchTerm) {
+                    $clean = preg_replace('/^(GEDUNG|KAMPUS)-/i', '', $targetId);
+                    $words = array_values(array_filter(explode('-', $clean), fn($w) => strlen(trim($w)) > 0));
+                    $likePattern = !empty($words) ? ('%' . implode('%', $words) . '%') : '';
+
+                    if (!empty($likePattern)) {
+                        $query->where(function ($q) use ($targetId, $likePattern) {
                             $q->where('id_gedung', $targetId)
-                              ->orWhere('lokasi_lengkap', 'like', "%{$searchTerm}%");
+                              ->orWhere('lokasi_lengkap', 'like', $likePattern);
                         });
                     }
                 } elseif (str_contains($ep, 'by-kampus/')) {
                     $parts = explode('/', $ep);
                     $targetId = urldecode(end($parts));
-                    $searchTerm = trim(str_replace(['KAMPUS-', '-'], [' ', ' '], $targetId));
-                    if (!empty($searchTerm)) {
-                        $query->where(function ($q) use ($targetId, $searchTerm) {
+                    $clean = preg_replace('/^(KAMPUS)-/i', '', $targetId);
+                    $words = array_values(array_filter(explode('-', $clean), fn($w) => strlen(trim($w)) > 0));
+                    $likePattern = !empty($words) ? ('%' . implode('%', $words) . '%') : '';
+
+                    if (!empty($likePattern)) {
+                        $query->where(function ($q) use ($targetId, $likePattern) {
                             $q->where('id_kampus', $targetId)
-                              ->orWhere('lokasi_lengkap', 'like', "%{$searchTerm}%");
+                              ->orWhere('lokasi_lengkap', 'like', $likePattern);
                         });
                     }
                 } elseif (str_contains($ep, 'by-jenis/')) {
