@@ -27,52 +27,70 @@ class SimantapService extends AbstractApiClient
     /**
      * Ambil bearer token via login, di-cache selama 60 menit.
      *
-     * @throws \RuntimeException jika login gagal
+     * @throws \RuntimeException jika login gagal dan token fallback tidak ada
      */
     protected function getBearerToken(array $config): string
     {
         return Cache::remember('simantap_api_token', now()->addMinutes(60), function () use ($config) {
             $email = config('services.simantap.email');
             $password = config('services.simantap.password');
+            $fallbackToken = config('services.simantap.token');
 
             if (empty($config['base_url']) || empty($email) || empty($password)) {
+                if (!empty($fallbackToken)) {
+                    return $fallbackToken;
+                }
                 Log::error('Simantap: Konfigurasi belum lengkap');
                 throw new \RuntimeException('Konfigurasi Simantap belum lengkap.');
             }
 
-            $response = Http::post(rtrim($config['base_url'], '/') . '/auth/login', [
-                'email' => $email,
-                'password' => $password,
-            ]);
+            $baseUrl = rtrim($config['base_url'], '/');
+            $loginUrl = str_ends_with($baseUrl, '/api') ? $baseUrl . '/auth/login' : $baseUrl . '/api/auth/login';
 
-            if ($response->failed()) {
-                Log::error('Simantap: Gagal login', ['status' => $response->status()]);
-                throw new \RuntimeException('Gagal login ke Simantap.');
+            try {
+                $response = Http::timeout(10)->post($loginUrl, [
+                    'email' => $email,
+                    'password' => $password,
+                ]);
+
+                if ($response->successful()) {
+                    $data = $response->json();
+                    $token = $data['data']['token'] ?? $data['token'] ?? null;
+                    if ($token) {
+                        return $token;
+                    }
+                }
+            } catch (\Throwable $e) {
+                Log::warning('Simantap: Gagal request login, menggunakan token fallback: ' . $e->getMessage());
             }
 
-            $data = $response->json();
-
-            if (!isset($data['success']) || $data['success'] !== true) {
-                Log::error('Simantap: Login gagal', ['response' => $data]);
-                throw new \RuntimeException('Login ke Simantap gagal.');
+            if (!empty($fallbackToken)) {
+                return $fallbackToken;
             }
 
-            $token = $data['data']['token'] ?? null;
-
-            if (!$token) {
-                Log::error('Simantap: Token tidak ditemukan');
-                throw new \RuntimeException('Token Simantap tidak ditemukan.');
-            }
-
-            return $token;
+            throw new \RuntimeException('Login ke Simantap gagal.');
         });
     }
 
     /**
-     * Override request untuk handle token expired (401) → refresh & retry sekali.
+     * Normalisasi endpoint agar tidak terjadi duplikasi '/api/api/...'.
+     */
+    protected function normalizeEndpoint(string $endpoint): string
+    {
+        $ep = ltrim($endpoint, '/');
+        $baseUrl = rtrim(config('services.simantap.base_url', ''), '/');
+        if (str_ends_with($baseUrl, '/api') && str_starts_with($ep, 'api/')) {
+            $ep = substr($ep, 4);
+        }
+        return '/' . ltrim($ep, '/');
+    }
+
+    /**
+     * Override request untuk normalisasi endpoint & handle token expired (401) → refresh & retry sekali.
      */
     protected function request(string $method, string $endpoint, array $payload = []): ApiResponse
     {
+        $endpoint = $this->normalizeEndpoint($endpoint);
         $response = parent::request($method, $endpoint, $payload);
 
         if ($response->status === 401) {
@@ -85,27 +103,112 @@ class SimantapService extends AbstractApiClient
     }
 
     /**
-     * Kirim request dengan method dinamis (backward compatible).
-     *
-     * @deprecated Gunakan get(), post(), put(), delete() secara langsung
+     * Kirim request dengan pola SWR (Stale-While-Revalidate):
+     * 1. Cek Cache utama (simantap.data.*)
+     *    - Jika fresh (< 20 menit) -> return <1ms instan
+     *    - Jika stale (> 20 menit) -> return <1ms instan + background defer hit API Simantap
+     * 2. Jika Cache miss -> Ambil dari Database lokal (App\Models\Aset 97k data)
+     *    - Return data DB instan (<50ms)
+     *    - Cache data DB sementara
+     *    - Background defer hit API Simantap untuk revalidasi data terbaru
+     * 3. Jika Cache & Database kosong (cold start) -> hit API Simantap secara synchronous
      */
     public function makeRequest(string $method, string $endpoint, array $params = []): ?array
     {
-        try {
-            $response = match (strtolower($method)) {
-                'get' => $this->get($endpoint, $params),
-                'post' => $this->post($endpoint, $params),
-                default => ApiResponse::unexpectedError("Method '{$method}' belum didukung."),
-            };
+        $method = strtoupper($method);
 
-            if ($response->success && !empty($response->data)) {
-                return $response->data;
+        // Jika bukan GET (POST, PUT, DELETE), kirim langsung ke API
+        if ($method !== 'GET') {
+            try {
+                $response = match ($method) {
+                    'POST' => $this->post($endpoint, $params),
+                    'PUT' => $this->put($endpoint, $params),
+                    'DELETE' => $this->delete($endpoint, $params),
+                    default => ApiResponse::unexpectedError("Method '{$method}' belum didukung."),
+                };
+                return $response->success ? ($response->data ?? []) : null;
+            } catch (\Throwable $e) {
+                Log::warning("Simantap: Gagal request {$method} {$endpoint}: " . $e->getMessage());
+                return null;
             }
-        } catch (\Throwable $e) {
-            Log::warning('Simantap API unavailable, using local database/fallback', ['endpoint' => $endpoint, 'error' => $e->getMessage()]);
         }
 
-        return $this->hasilFallbackSimantapData($endpoint, $params);
+        $cleanEndpoint = ltrim($this->normalizeEndpoint($endpoint), '/');
+        $paramHash = md5(serialize($params));
+        $cacheKey = "simantap.data.{$cleanEndpoint}.{$paramHash}";
+        $freshFlagKey = "simantap.fresh.{$cleanEndpoint}.{$paramHash}";
+
+        // 1. Cek Cache
+        if (Cache::has($cacheKey)) {
+            $cachedData = Cache::get($cacheKey);
+            if (is_array($cachedData)) {
+                // Jika masih fresh (< 20 menit), langsung kembalikan (<1ms)
+                if (Cache::has($freshFlagKey)) {
+                    return $cachedData;
+                }
+
+                // Stale hit: Kembalikan data lama instan, refresh API di background
+                if (function_exists('defer')) {
+                    defer(function () use ($endpoint, $params, $cacheKey, $freshFlagKey) {
+                        $this->refreshFromApiBackground($endpoint, $params, $cacheKey, $freshFlagKey);
+                    });
+                }
+
+                return $cachedData;
+            }
+        }
+
+        // 2. Cache Miss: Ambil dari Database lokal (hasilFallbackSimantapData dari 97.715 data asets)
+        $dbData = $this->hasilFallbackSimantapData($endpoint, $params);
+        $hasDbData = !empty($dbData['data']) || !empty($dbData['id_kampus']) || (isset($dbData['total']) && $dbData['total'] > 0);
+
+        if ($hasDbData) {
+            // Simpan data DB ke cache agar request berikutnya <1ms
+            Cache::put($cacheKey, $dbData, now()->addHours(6));
+
+            // Picu pembaruan dari API di background dengan defer
+            if (function_exists('defer')) {
+                defer(function () use ($endpoint, $params, $cacheKey, $freshFlagKey) {
+                    $this->refreshFromApiBackground($endpoint, $params, $cacheKey, $freshFlagKey);
+                });
+            }
+
+            return $dbData;
+        }
+
+        // 3. Cold start (Cache & DB tidak ada data): Hit API secara langsung
+        try {
+            $response = $this->get($endpoint, $params);
+            if ($response->success && !empty($response->data)) {
+                $apiData = $response->data;
+                Cache::put($cacheKey, $apiData, now()->addHours(6));
+                Cache::put($freshFlagKey, true, now()->addMinutes(20));
+                return $apiData;
+            }
+        } catch (\Throwable $e) {
+            Log::warning("Simantap: Gagal fetch synchronous dari API {$endpoint}: " . $e->getMessage());
+        }
+
+        return $dbData;
+    }
+
+    /**
+     * Refresh data dari API Simantap di background via defer().
+     * Jika API mengembalikan data sukses, perbarui cache & pasang fresh flag.
+     */
+    protected function refreshFromApiBackground(string $endpoint, array $params, string $cacheKey, string $freshFlagKey): void
+    {
+        try {
+            $response = $this->get($endpoint, $params);
+            if ($response->success && !empty($response->data)) {
+                $apiData = $response->data;
+                Cache::put($cacheKey, $apiData, now()->addHours(6));
+                Cache::put($freshFlagKey, true, now()->addMinutes(20));
+                Log::info("Simantap SWR: Berhasil background refresh dari API untuk {$endpoint}");
+            }
+        } catch (\Throwable $e) {
+            Log::warning("Simantap SWR: Gagal background refresh untuk {$endpoint}: " . $e->getMessage());
+        }
     }
 
     /**
@@ -498,6 +601,54 @@ class SimantapService extends AbstractApiClient
         ];
     }
 
+    /**
+     * Typed convenience methods wrapping makeRequest with SWR.
+     */
+    public function getKampus(array $params = []): ApiResponse
+    {
+        $data = $this->makeRequest('GET', 'kampus', $params);
+        return new ApiResponse(success: true, status: 200, message: 'OK', data: $data);
+    }
 
+    public function getGedung(array $params = []): ApiResponse
+    {
+        $data = $this->makeRequest('GET', 'gedung', $params);
+        return new ApiResponse(success: true, status: 200, message: 'OK', data: $data);
+    }
 
+    public function getRuangan(array $params = []): ApiResponse
+    {
+        $data = $this->makeRequest('GET', 'ruangan', $params);
+        return new ApiResponse(success: true, status: 200, message: 'OK', data: $data);
+    }
+
+    public function getBmn(array $params = []): ApiResponse
+    {
+        $data = $this->makeRequest('GET', 'bmn', $params);
+        return new ApiResponse(success: true, status: 200, message: 'OK', data: $data);
+    }
+
+    public function getBmnAll(array $params = []): ApiResponse
+    {
+        $data = $this->makeRequest('GET', 'bmn-all', $params);
+        return new ApiResponse(success: true, status: 200, message: 'OK', data: $data);
+    }
+
+    public function getJenisBarang(array $params = []): ApiResponse
+    {
+        $data = $this->makeRequest('GET', 'jenis-barang', $params);
+        return new ApiResponse(success: true, status: 200, message: 'OK', data: $data);
+    }
+
+    public function getKodeBarang(array $params = []): ApiResponse
+    {
+        $data = $this->makeRequest('GET', 'kode-barang', $params);
+        return new ApiResponse(success: true, status: 200, message: 'OK', data: $data);
+    }
+
+    public function getSatker(array $params = []): ApiResponse
+    {
+        $data = $this->makeRequest('GET', 'satker', $params);
+        return new ApiResponse(success: true, status: 200, message: 'OK', data: $data);
+    }
 }

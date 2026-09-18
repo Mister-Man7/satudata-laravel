@@ -291,3 +291,104 @@
     will-change: transform;
 }
 
+/* Sidebar Layout Utilities */
+.satudata-sidebar {
+    position: fixed;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    height: 100vh;
+    z-index: 40;
+    display: flex;
+    flex-direction: column;
+    background-color: #0f172a;
+    border-right: 1px solid #1e293b;
+    color: #f8fafc;
+    overflow: hidden;
+}
+
+@media (max-width: 1023px) {
+    .satudata-sidebar-desktop {
+        display: none !important;
+    }
+    .satudata-content-wrapper {
+        padding-left: 0 !important;
+    }
+}
+
+@media (min-width: 1024px) {
+    .satudata-sidebar-desktop {
+        display: flex !important;
+        width: 16rem;
+    }
+    html.sidebar-collapsed .satudata-sidebar-desktop {
+        width: 5rem !important;
+    }
+
+    .satudata-content-wrapper {
+        padding-left: 16rem;
+    }
+    html.sidebar-collapsed .satudata-content-wrapper {
+        padding-left: 5rem !important;
+    }
+
+    /* Floating tooltip on hover only when collapsed */
+    html.sidebar-collapsed .satudata-sidebar-desktop a:hover .satudata-sidebar-tooltip,
+    html.sidebar-collapsed .satudata-sidebar-desktop button:hover .satudata-sidebar-tooltip {
+        display: flex !important;
+    }
+
+    html.sidebar-collapsed .satudata-collapse-icon {
+        transform: rotate(180deg);
+    }
+
+    /* Profile Dropdown Popover */
+    .satudata-profile-popover {
+        bottom: calc(100% + 0.5rem);
+        left: 0.75rem;
+        right: 0.75rem;
+    }
+    html.sidebar-collapsed .satudata-profile-popover {
+        bottom: 0.75rem;
+        left: calc(100% + 0.75rem);
+        right: auto;
+        width: 14rem;
+    }
+    html.sidebar-collapsed .satudata-sidebar-desktop {
+        overflow: visible !important;
+    }
+}
+
+/* Sidebar Text Labels Visibility & Transition */
+.satudata-sidebar-label {
+    overflow: hidden;
+    white-space: nowrap;
+    opacity: 1;
+}
+
+/* When collapsed: fade out label */
+html.sidebar-collapsed .satudata-sidebar-label {
+    opacity: 0 !important;
+    pointer-events: none;
+}
+
+/* Instant CSS state on page navigation (SSR / First Paint) - prevents ANY flash or glitch */
+html.sidebar-collapsed:not(.sidebar-animated) .satudata-sidebar-label {
+    display: none !important;
+}
+
+/* Transitions ONLY active during explicit user interaction */
+.sidebar-animated .satudata-sidebar-desktop {
+    transition: width 0.25s cubic-bezier(0.4, 0, 0.2, 1) !important;
+    overflow: hidden !important;
+}
+.sidebar-animated .satudata-content-wrapper {
+    transition: padding-left 0.25s cubic-bezier(0.4, 0, 0.2, 1) !important;
+}
+.sidebar-animated .satudata-sidebar-label {
+    transition: opacity 0.18s ease-in-out !important;
+}
+.sidebar-animated .satudata-collapse-icon {
+    transition: transform 0.25s ease !important;
+}
+

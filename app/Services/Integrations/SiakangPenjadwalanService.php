@@ -24,7 +24,10 @@ class SiakangPenjadwalanService extends AbstractApiClient
     }
 
     /**
-     * Ambil data penjadwalan dosen (cached).
+     * Ambil data penjadwalan dosen.
+     *
+     * SWR dual-key: data (TTL 2 jam) + freshness flag (TTL 10 menit).
+     * Data per-NIP bersifat realtime, TTL lebih pendek dibanding data agregat.
      *
      * @param  array{semester: string, nip: string}  $params
      */
@@ -45,21 +48,37 @@ class SiakangPenjadwalanService extends AbstractApiClient
         $params['semester'] = $semester;
         $params['nip'] = $nip;
 
-        $cacheKey = 'siakang.penjadwalan.' . md5(json_encode($params));
+        $cacheKey     = 'siakang.penjadwalan.' . md5(json_encode($params));
+        $staleFlagKey = $cacheKey . '.fresh';
 
+        // 1. Cache ada — return segera, refresh jika stale
         if (Cache::has($cacheKey)) {
-            return new ApiResponse(
-                success: true,
-                status: 200,
-                message: 'Data dari cache',
-                data: Cache::get($cacheKey),
-            );
+            $data = Cache::get($cacheKey);
+
+            if (!Cache::has($staleFlagKey) && function_exists('defer')) {
+                defer(function () use ($cacheKey, $staleFlagKey, $params) {
+                    try {
+                        $response = $this->get('/rencana-studi/penjadwalan', $params);
+                        if ($response->success && !empty($response->data)) {
+                            Cache::put($cacheKey, $response->data, now()->addHours(2));
+                        }
+                    } catch (\Throwable $e) {
+                        \Illuminate\Support\Facades\Log::warning('SWR penjadwalan refresh gagal: ' . $e->getMessage());
+                    } finally {
+                        Cache::put($staleFlagKey, true, now()->addMinutes(10));
+                    }
+                });
+            }
+
+            return new ApiResponse(success: true, status: 200, message: 'Data penjadwalan', data: $data);
         }
 
+        // 2. API blocking — tidak ada DB lokal untuk data penjadwalan per-NIP
         $response = $this->get('/rencana-studi/penjadwalan', $params);
 
-        if ($response->success) {
-            Cache::put($cacheKey, $response->data, now()->addMinutes(10));
+        if ($response->success && !empty($response->data)) {
+            Cache::put($cacheKey, $response->data, now()->addHours(2));
+            Cache::put($staleFlagKey, true, now()->addMinutes(10));
         }
 
         return $response;

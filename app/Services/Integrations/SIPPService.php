@@ -161,146 +161,206 @@ class SIPPService extends AbstractApiClient
     }
 
     /**
+     * Ambil data dari endpoint SIPP dengan pola SWR (Stale-While-Revalidate).
+     */
+    public function getWithSwr(string $endpoint, array $params = []): ApiResponse
+    {
+        $cleanEndpoint = ltrim($endpoint, '/');
+        $paramHash     = md5(serialize($params));
+        $cacheKey      = "sipp.data.{$cleanEndpoint}.{$paramHash}";
+        $freshFlagKey  = "sipp.fresh.{$cleanEndpoint}.{$paramHash}";
+
+        // 1. Cek Cache
+        if (Cache::has($cacheKey)) {
+            $cached = Cache::get($cacheKey);
+            if ($cached instanceof ApiResponse || is_array($cached)) {
+                $responseObj = $cached instanceof ApiResponse ? $cached : new ApiResponse(true, 200, 'OK', $cached);
+
+                // Jika masih segar (< 20 menit), return instan
+                if (Cache::has($freshFlagKey)) {
+                    return $responseObj;
+                }
+
+                // Stale hit: return data lama instan, refresh API di background
+                if (function_exists('defer')) {
+                    defer(function () use ($endpoint, $params, $cacheKey, $freshFlagKey) {
+                        $this->refreshEndpointBackground($endpoint, $params, $cacheKey, $freshFlagKey);
+                    });
+                }
+
+                return $responseObj;
+            }
+        }
+
+        // 2. Cache miss: Ambil langsung dari API
+        $response = $this->get($endpoint, $params);
+        if ($response->success && !empty($response->data)) {
+            Cache::put($cacheKey, $response->data, now()->addHours(6));
+            Cache::put($freshFlagKey, true, now()->addMinutes(20));
+        }
+
+        return $response;
+    }
+
+    protected function refreshEndpointBackground(string $endpoint, array $params, string $cacheKey, string $freshFlagKey): void
+    {
+        try {
+            $response = $this->get($endpoint, $params);
+            if ($response->success && !empty($response->data)) {
+                Cache::put($cacheKey, $response->data, now()->addHours(6));
+                Cache::put($freshFlagKey, true, now()->addMinutes(20));
+                Log::info("SIPP SWR: Background refresh berhasil untuk {$endpoint}");
+            }
+        } catch (\Throwable $e) {
+            Log::warning("SIPP SWR: Background refresh gagal untuk {$endpoint}: " . $e->getMessage());
+        }
+    }
+
+    /**
      * Ambil data publikasi.
      */
     public function getPublikasi(array $params = []): ApiResponse
     {
-        return $this->get('/api/publikasi', $params);
+        return $this->getWithSwr('/api/publikasi', $params);
     }
 
     public function getPenelitian(array $params = []): ApiResponse
     {
-        return $this->get('/api/penelitian', $params);
+        return $this->getWithSwr('/api/penelitian', $params);
     }
 
     public function getPengabdian(array $params = []): ApiResponse
     {
-        return $this->get('/api/pengabdian', $params);
+        return $this->getWithSwr('/api/pengabdian', $params);
     }
 
     public function getPenelitianSinta1Sinta2(array $params = []): ApiResponse
     {
-        return $this->get('/api/penelitian_sinta1_sinta2', $params);
+        return $this->getWithSwr('/api/penelitian_sinta1_sinta2', $params);
     }
 
     public function getPengembangan(array $params = []): ApiResponse
     {
-        return $this->get('/api/pengembangan', $params);
+        return $this->getWithSwr('/api/pengembangan', $params);
     }
 
     public function getPenelitianSinta3456(array $params = []): ApiResponse
     {
-        return $this->get('/api/penelitian_sinta3456', $params);
+        return $this->getWithSwr('/api/penelitian_sinta3456', $params);
     }
 
     public function getPenelitianJurnalNasionalIssn(array $params = []): ApiResponse
     {
-        return $this->get('/api/penelitian_jurnal_nasional_issn', $params);
+        return $this->getWithSwr('/api/penelitian_jurnal_nasional_issn', $params);
     }
 
     public function getPenelitianJurnalInternasionalQ1234(array $params = []): ApiResponse
     {
-        return $this->get('/api/penelitian_jurnal_internasional_q1234', $params);
+        return $this->getWithSwr('/api/penelitian_jurnal_internasional_q1234', $params);
     }
 
     public function getPenelitianJurnalInternasionalPbb(array $params = []): ApiResponse
     {
-        return $this->get('/api/penelitian_jurnal_internasional_pbb', $params);
+        return $this->getWithSwr('/api/penelitian_jurnal_internasional_pbb', $params);
     }
 
     public function getPengabdianMasyarakat(array $params = []): ApiResponse
     {
-        return $this->get('/api/pengabdian_masyarakat', $params);
+        return $this->getWithSwr('/api/pengabdian_masyarakat', $params);
     }
 
     public function getBukuReferensi(string $nip, array $params = []): ApiResponse
     {
         $params['jenis'] = 'buku_referensi';
-        $params['nip'] = $nip;
-        return $this->get('/api/sipp', $params);
+        $params['nip']   = $nip;
+        return $this->getWithSwr('/api/sipp', $params);
     }
 
     /**
-     * Ambil ringkasan beban luaran ilmiah SIPP untuk NIP tertentu dari API.
-     * Caching per-semester dataset agar performa cepat dan hemat kuota API.
+     * Ambil ringkasan beban luaran ilmiah SIPP untuk NIP tertentu dengan pola SWR (Stale-While-Revalidate):
+     * 1. Cek Cache utama (sipp_summary_*)
+     *    - Jika fresh (< 20 menit) -> return <1ms instan
+     *    - Jika stale (> 20 menit) -> return <1ms instan + background defer concurrent pool & sync DB
+     * 2. Jika Cache miss -> Ambil dari Database lokal (dosen_sipps)
+     *    - Return data DB instan (<10ms)
+     *    - Simpan ke Cache sementara
+     *    - Background defer concurrent pool ke API SIPP & update DB
+     * 3. Jika Cache & DB kosong (cold start pertama kali) -> Jalankan concurrent pool secara synchronous
      */
     public function getDosenSippSummary(string $nip, ?string $semester = '20252'): array
     {
-        @set_time_limit(120); // Alokasi waktu cukup untuk fetch concurrent API SIPP saat database/cache kosong
         $semester = $semester ?: '20252';
+        $cleanNip = trim($nip);
 
-        $fetchSemesterList = function (string $key, callable $fetcher) use ($semester) {
-            $cacheKey = "sipp_cache_{$key}_{$semester}";
-            $cached = Cache::get($cacheKey);
-            if (is_array($cached) && !empty($cached)) {
+        $summaryCacheKey = "sipp_summary_{$cleanNip}_{$semester}";
+        $freshFlagKey    = "sipp_summary_fresh_{$cleanNip}_{$semester}";
+
+        // 1. Cek Cache Utama
+        if (Cache::has($summaryCacheKey)) {
+            $cached = Cache::get($summaryCacheKey);
+            if (is_array($cached)) {
+                // Jika masih segar (< 20 menit), langsung kembalikan (<1ms)
+                if (Cache::has($freshFlagKey)) {
+                    return $cached;
+                }
+
+                // Stale hit: Kembalikan data lama instan, refresh concurrent pool & sync DB di background
+                if (function_exists('defer')) {
+                    defer(function () use ($cleanNip, $semester, $summaryCacheKey, $freshFlagKey) {
+                        $this->fetchConcurrentAndSyncDb($cleanNip, $semester, $summaryCacheKey, $freshFlagKey);
+                    });
+                }
+
                 return $cached;
             }
+        }
 
-            try {
-                $response = $fetcher();
-                if (!$response->success) {
-                    return [];
+        // 2. Cache Miss: Cek Database lokal (dosen_sipps)
+        try {
+            $dbRecord = \App\Models\DosenSipp::where('nip', $cleanNip)
+                ->where('semester', $semester)
+                ->first();
+
+            if ($dbRecord) {
+                $dbMetrics = [
+                    'sinta12' => (int) $dbRecord->sinta12,
+                    'sinta36' => (int) $dbRecord->sinta36,
+                    'jurnal_internasional_q' => (int) $dbRecord->jurnal_internasional_q,
+                    'jurnal_internasional_pbb' => (int) $dbRecord->jurnal_internasional_pbb,
+                    'jurnal_nasional_issn' => (int) $dbRecord->jurnal_nasional_issn,
+                    'pengembangan' => (int) $dbRecord->pengembangan,
+                    'pengabdian_masyarakat' => (int) $dbRecord->pengabdian_masyarakat,
+                    'buku_referensi' => (int) $dbRecord->buku_referensi,
+                ];
+
+                // Simpan ke cache agar request berikutnya <1ms
+                Cache::put($summaryCacheKey, $dbMetrics, now()->addHours(6));
+
+                // Picu pembaruan API secara concurrent di background dengan defer
+                if (function_exists('defer')) {
+                    defer(function () use ($cleanNip, $semester, $summaryCacheKey, $freshFlagKey) {
+                        $this->fetchConcurrentAndSyncDb($cleanNip, $semester, $summaryCacheKey, $freshFlagKey);
+                    });
                 }
-                $data = $response->data ?? [];
-                if (is_array($data) && isset($data['data']) && is_array($data['data'])) {
-                    $data = $data['data'];
-                }
-                $list = is_array($data) ? $data : [];
-                if (!empty($list)) {
-                    Cache::put($cacheKey, $list, now()->addHours(6));
-                }
-                return $list;
-            } catch (\Throwable $e) {
-                Log::warning("SIPP: Gagal fetch {$key}: " . $e->getMessage());
-                return [];
+
+                return $dbMetrics;
             }
-        };
+        } catch (\Throwable $e) {
+            Log::warning("SIPP SWR: Gagal cek DB lokal dosen_sipps: " . $e->getMessage());
+        }
 
-        $findBeban = function (array $list, string $nip) {
-            $cleanNip = trim($nip);
+        // 3. Cold start (Cache & DB belum ada data): Jalankan concurrent pool secara synchronous
+        return $this->fetchConcurrentAndSyncDb($cleanNip, $semester, $summaryCacheKey, $freshFlagKey);
+    }
 
-            // 1. Direct associative key match
-            if (isset($list[$cleanNip])) {
-                $val = $list[$cleanNip];
-                if (is_numeric($val)) return (int)$val;
-                if (is_array($val)) {
-                    foreach (['beban', 'total_beban', 'jumlah_beban', 'sks', 'bobot', 'total', 'jumlah'] as $field) {
-                        if (isset($val[$field]) && is_numeric($val[$field])) {
-                            return (int)$val[$field];
-                        }
-                    }
-                    return count($val);
-                }
-            }
-
-            // 2. Iterative search & summation across all items for this NIP
-            $totalBeban = 0;
-            $matchFound = false;
-
-            foreach ($list as $key => $item) {
-                if (!is_array($item)) {
-                    if (trim((string)$key) === $cleanNip && is_numeric($item)) {
-                        return (int)$item;
-                    }
-                    continue;
-                }
-
-                $itemNip = trim((string)($item['nip'] ?? $item['nip_dosen'] ?? $item['nidn'] ?? $item['kd_pegawai'] ?? ''));
-                if ($itemNip !== '' && $itemNip === $cleanNip) {
-                    $matchFound = true;
-                    $itemBeban = null;
-                    foreach (['beban', 'total_beban', 'jumlah_beban', 'sks', 'bobot', 'total', 'jumlah'] as $field) {
-                        if (isset($item[$field]) && is_numeric($item[$field])) {
-                            $itemBeban = (int)$item[$field];
-                            break;
-                        }
-                    }
-                    $totalBeban += ($itemBeban !== null ? $itemBeban : 1);
-                }
-            }
-
-            return $matchFound ? $totalBeban : 0;
-        };
+    /**
+     * Jalankan concurrent HTTP pool ke seluruh endpoint SIPP secara paralel,
+     * hitung metrik beban, sinkronkan ke database dosen_sipps, dan perbarui cache.
+     */
+    public function fetchConcurrentAndSyncDb(string $nip, string $semester, string $summaryCacheKey, string $freshFlagKey): array
+    {
+        @set_time_limit(120);
+        $cleanNip = trim($nip);
 
         $endpoints = [
             'sinta12'      => '/api/penelitian_sinta1_sinta2',
@@ -317,7 +377,7 @@ class SIPPService extends AbstractApiClient
         $missing = [];
 
         foreach ($endpoints as $key => $endpoint) {
-            $cacheKey = ($key === 'buku') ? "sipp_cache_buku_{$nip}_{$semester}" : "sipp_cache_{$key}_{$semester}";
+            $cacheKey = ($key === 'buku') ? "sipp_cache_buku_{$cleanNip}_{$semester}" : "sipp_cache_{$key}_{$semester}";
             $cached = Cache::get($cacheKey);
             if (is_array($cached) && !empty($cached)) {
                 $lists[$key] = $cached;
@@ -326,26 +386,27 @@ class SIPPService extends AbstractApiClient
             }
         }
 
+        // Jalankan fetch secara CONCURRENT menggunakan Http::pool untuk endpoint yang missing
         if (!empty($missing)) {
-            $token = $this->getBearerToken($this->config());
-            $baseUrl = rtrim(config('services.sipp.base_url', 'https://sipp.untirta.ac.id'), '/');
-            $headers = [
-                'Accept'     => 'application/json',
-                'User-Agent' => 'PostmanRuntime/7.43.0',
-            ];
-            $cfClearance = config('services.sipp.cf_clearance', '');
-            if (!empty($cfClearance)) {
-                $headers['Cookie'] = 'cf_clearance=' . $cfClearance;
-            }
-
             try {
-                $responses = \Illuminate\Support\Facades\Http::pool(function (\Illuminate\Http\Client\Pool $pool) use ($missing, $baseUrl, $token, $headers, $semester, $nip) {
+                $token = $this->getBearerToken($this->config());
+                $baseUrl = rtrim(config('services.sipp.base_url', 'https://sipp.untirta.ac.id'), '/');
+                $headers = [
+                    'Accept'     => 'application/json',
+                    'User-Agent' => 'PostmanRuntime/7.43.0',
+                ];
+                $cfClearance = config('services.sipp.cf_clearance', '');
+                if (!empty($cfClearance)) {
+                    $headers['Cookie'] = 'cf_clearance=' . $cfClearance;
+                }
+
+                $responses = \Illuminate\Support\Facades\Http::pool(function (\Illuminate\Http\Client\Pool $pool) use ($missing, $baseUrl, $token, $headers, $semester, $cleanNip) {
                     $reqs = [];
                     foreach ($missing as $key => $endpoint) {
                         $params = ['kode_semester' => $semester, 'semester' => $semester];
                         if ($key === 'buku') {
                             $params['jenis'] = 'buku_referensi';
-                            $params['nip'] = $nip;
+                            $params['nip'] = $cleanNip;
                         }
                         $reqs[$key] = $pool->as($key)
                             ->withToken($token)
@@ -366,7 +427,7 @@ class SIPPService extends AbstractApiClient
                             $data = $data['data'];
                         }
                         $list = is_array($data) ? $data : [];
-                        $cacheKey = ($key === 'buku') ? "sipp_cache_buku_{$nip}_{$semester}" : "sipp_cache_{$key}_{$semester}";
+                        $cacheKey = ($key === 'buku') ? "sipp_cache_buku_{$cleanNip}_{$semester}" : "sipp_cache_{$key}_{$semester}";
                         if (!empty($list)) {
                             Cache::put($cacheKey, $list, now()->addHours(6));
                         }
@@ -374,64 +435,97 @@ class SIPPService extends AbstractApiClient
                     $lists[$key] = $list;
                 }
             } catch (\Throwable $e) {
-                Log::warning("SIPP: Gagal concurrent pool fetch: " . $e->getMessage());
+                Log::warning("SIPP SWR: Gagal concurrent pool fetch untuk {$cleanNip}: " . $e->getMessage());
             }
         }
 
-        $sinta12List      = $lists['sinta12'] ?? [];
-        $sinta36List      = $lists['sinta36'] ?? [];
-        $jurnalQList      = $lists['jurnal_q'] ?? [];
-        $jurnalPbbList    = $lists['jurnal_pbb'] ?? [];
-        $jurnalIssnList   = $lists['jurnal_issn'] ?? [];
+        $sinta12List = $lists['sinta12'] ?? [];
+        $sinta36List = $lists['sinta36'] ?? [];
+        $jurnalQList = $lists['jurnal_q'] ?? [];
+        $jurnalPbbList = $lists['jurnal_pbb'] ?? [];
+        $jurnalIssnList = $lists['jurnal_issn'] ?? [];
         $pengembanganList = $lists['pengembangan'] ?? [];
-        $pengabdianList   = $lists['pengabdian'] ?? [];
-        $bukuRefBeban     = $findBeban($lists['buku'] ?? [], $nip);
+        $pengabdianList = $lists['pengabdian'] ?? [];
+        $bukuRefBeban = $this->extractBebanFromList($lists['buku'] ?? [], $cleanNip);
 
         $metrics = [
-            'sinta12' => $findBeban($sinta12List, $nip),
-            'sinta36' => $findBeban($sinta36List, $nip),
-            'jurnal_internasional_q' => $findBeban($jurnalQList, $nip),
-            'jurnal_internasional_pbb' => $findBeban($jurnalPbbList, $nip),
-            'jurnal_nasional_issn' => $findBeban($jurnalIssnList, $nip),
-            'pengembangan' => $findBeban($pengembanganList, $nip),
-            'pengabdian_masyarakat' => $findBeban($pengabdianList, $nip),
+            'sinta12' => $this->extractBebanFromList($sinta12List, $cleanNip),
+            'sinta36' => $this->extractBebanFromList($sinta36List, $cleanNip),
+            'jurnal_internasional_q' => $this->extractBebanFromList($jurnalQList, $cleanNip),
+            'jurnal_internasional_pbb' => $this->extractBebanFromList($jurnalPbbList, $cleanNip),
+            'jurnal_nasional_issn' => $this->extractBebanFromList($jurnalIssnList, $cleanNip),
+            'pengembangan' => $this->extractBebanFromList($pengembanganList, $cleanNip),
+            'pengabdian_masyarakat' => $this->extractBebanFromList($pengabdianList, $cleanNip),
             'buku_referensi' => $bukuRefBeban,
         ];
 
-        // Jika API mengembalikan data beban (> 0), sinkronkan ke database dosen_sipps
+        // Sinkronkan ke database dosen_sipps jika terdapat metrik beban (> 0)
         $totalBeban = array_sum($metrics);
         if ($totalBeban > 0) {
             try {
                 \App\Models\DosenSipp::updateOrCreate(
-                    ['nip' => trim($nip), 'semester' => $semester],
+                    ['nip' => $cleanNip, 'semester' => $semester],
                     $metrics
                 );
             } catch (\Throwable $e) {
-                Log::warning("Gagal sync dosen_sipps NIP {$nip}: " . $e->getMessage());
+                Log::warning("SIPP SWR: Gagal sync database dosen_sipps NIP {$cleanNip}: " . $e->getMessage());
             }
-            return $metrics;
         }
 
-        // Fallback dinamis HANYA dari MySQL database dosen_sipps jika API 0 / gagal / terhalang
-        try {
-            $dbRecord = \App\Models\DosenSipp::where('nip', trim($nip))
-                ->where('semester', $semester)
-                ->first();
-
-            if ($dbRecord) {
-                return [
-                    'sinta12'                  => (int) $dbRecord->sinta12,
-                    'sinta36'                  => (int) $dbRecord->sinta36,
-                    'jurnal_internasional_q'   => (int) $dbRecord->jurnal_internasional_q,
-                    'jurnal_internasional_pbb' => (int) $dbRecord->jurnal_internasional_pbb,
-                    'jurnal_nasional_issn'     => (int) $dbRecord->jurnal_nasional_issn,
-                    'pengembangan'             => (int) $dbRecord->pengembangan,
-                    'pengabdian_masyarakat'    => (int) $dbRecord->pengabdian_masyarakat,
-                    'buku_referensi'           => (int) $dbRecord->buku_referensi,
-                ];
-            }
-        } catch (\Throwable $e) {}
+        // Simpan ke cache utama & pasang fresh flag
+        Cache::put($summaryCacheKey, $metrics, now()->addHours(6));
+        Cache::put($freshFlagKey, true, now()->addMinutes(20));
 
         return $metrics;
+    }
+
+    /**
+     * Helper kalkulasi beban luaran ilmiah dari list API SIPP untuk NIP tertentu.
+     */
+    protected function extractBebanFromList(array $list, string $nip): int
+    {
+        $cleanNip = trim($nip);
+
+        // 1. Direct associative key match
+        if (isset($list[$cleanNip])) {
+            $val = $list[$cleanNip];
+            if (is_numeric($val)) return (int)$val;
+            if (is_array($val)) {
+                foreach (['beban', 'total_beban', 'jumlah_beban', 'sks', 'bobot', 'total', 'jumlah'] as $field) {
+                    if (isset($val[$field]) && is_numeric($val[$field])) {
+                        return (int)$val[$field];
+                    }
+                }
+                return count($val);
+            }
+        }
+
+        // 2. Iterative search & summation across all items for this NIP
+        $totalBeban = 0;
+        $matchFound = false;
+
+        foreach ($list as $key => $item) {
+            if (!is_array($item)) {
+                if (trim((string)$key) === $cleanNip && is_numeric($item)) {
+                    return (int)$item;
+                }
+                continue;
+            }
+
+            $itemNip = trim((string)($item['nip'] ?? $item['nip_dosen'] ?? $item['nidn'] ?? $item['kd_pegawai'] ?? ''));
+            if ($itemNip !== '' && $itemNip === $cleanNip) {
+                $matchFound = true;
+                $itemBeban = null;
+                foreach (['beban', 'total_beban', 'jumlah_beban', 'sks', 'bobot', 'total', 'jumlah'] as $field) {
+                    if (isset($item[$field]) && is_numeric($item[$field])) {
+                        $itemBeban = (int)$item[$field];
+                        break;
+                    }
+                }
+                $totalBeban += ($itemBeban !== null ? $itemBeban : 1);
+            }
+        }
+
+        return $matchFound ? $totalBeban : 0;
     }
 }
