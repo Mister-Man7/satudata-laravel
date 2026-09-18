@@ -435,9 +435,11 @@ class SimpegPegawaiService extends AbstractApiClient
             $rows = \App\Models\Pegawai::where(function ($q) {
                 $q->where('level_pegawai', 'like', '%Dosen%')
                   ->orWhere('jabatan', 'like', '%Dosen%')
+                  ->orWhere('jabatan', 'like', '%Guru Besar%')
+                  ->orWhere('jabatan', 'like', '%Profesor%')
                   ->orWhere('jabatan', 'like', '%Lektor%')
                   ->orWhere('jabatan', 'like', '%Asisten Ahli%')
-                  ->orWhere('jabatan', 'like', '%Profesor%');
+                  ->orWhere('jabatan', 'like', '%Tenaga Pengajar%');
             })->get();
 
             $list = $rows->map(fn($item) => $this->mapDbPegawaiToItem($item))->toArray();
