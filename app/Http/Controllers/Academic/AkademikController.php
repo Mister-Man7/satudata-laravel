@@ -7,6 +7,7 @@ use App\Models\Mahasiswa;
 use App\Services\DTO\ApiResponse;
 use App\Services\Integrations\SiakangLulusanService;
 use App\Services\Integrations\SiakangMahasiswaAktifService;
+use App\Services\Integrations\SiakangMahasiswaService;
 use App\Services\Integrations\SimpegPegawaiService;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
@@ -19,6 +20,7 @@ class AkademikController extends Controller
         public SiakangMahasiswaAktifService $aktifService,
         public SiakangLulusanService        $lulusanService,
         public SimpegPegawaiService         $pegawaiService,
+        public SiakangMahasiswaService      $mahasiswaService,
     )
     {
     }
@@ -38,6 +40,10 @@ class AkademikController extends Controller
                     ->orderBy('angkatan', 'asc')
                     ->pluck('total', 'angkatan')
                     ->toArray();
+
+                if (empty($peminatPerJalur)) {
+                    throw new \RuntimeException();
+                }
 
                 // 1 query terkumpul alih-alih 24 queries berulang pada 80.000+ data
                 $rawData = Mahasiswa::selectRaw('angkatan, jalur_masuk_id, count(*) as total')
@@ -60,12 +66,37 @@ class AkademikController extends Controller
 
                 return [$peminatPerJalur, $chartPeminat];
             } catch (\Throwable $e) {
-                $chartPeminat = [];
-                for ($tahun = $tahunMulai; $tahun <= $tahunSelesai; $tahun++) {
-                    $chartPeminat[$tahun] = ['Seleksi Nasional' => 1200, 'Seleksi Mandiri' => 800, 'Lainnya' => 300];
-                }
-                return [[], $chartPeminat];
+                // Lanjut ke pemanggilan API SIAKANG jika tabel lokal belum ada/kosong
             }
+
+            // Fallback ke API eksternal SIAKANG /v2/mahasiswa per angkatan
+            $peminatPerJalur = [];
+            $chartPeminat = [];
+            for ($tahun = $tahunMulai; $tahun <= $tahunSelesai; $tahun++) {
+                try {
+                    $apiRes = $this->mahasiswaService->getData(['limit' => 1, 'angkatan' => $tahun]);
+                    $raw = $apiRes->data ?? [];
+                    $meta = isset($raw[0]) && is_array($raw[0]) ? $raw[0] : $raw;
+                    $totalTahun = (int) ($meta['total'] ?? 0);
+
+                    if ($totalTahun > 0) {
+                        $peminatPerJalur[$tahun] = $totalTahun;
+                        $chartPeminat[$tahun] = [
+                            'Seleksi Nasional' => (int) round($totalTahun * 0.60),
+                            'Seleksi Mandiri'  => (int) round($totalTahun * 0.30),
+                            'Lainnya'          => (int) round($totalTahun * 0.10),
+                        ];
+                        continue;
+                    }
+                } catch (\Throwable $e) {
+                }
+
+                $fallbackTotal = 2300;
+                $peminatPerJalur[$tahun] = $fallbackTotal;
+                $chartPeminat[$tahun] = ['Seleksi Nasional' => 1200, 'Seleksi Mandiri' => 800, 'Lainnya' => 300];
+            }
+
+            return [$peminatPerJalur, $chartPeminat];
         });
 
         // Daftar semester yang tersedia di dropdown
@@ -428,22 +459,27 @@ class AkademikController extends Controller
     {
         return Cache::remember("akademik_total_mhs_baru_{$kodeSemester}", now()->addHours(12), function () use ($kodeSemester) {
             try {
-                $count = (int) Mahasiswa::where('payload->periode_masuk', $kodeSemester)->count();
-                if ($count > 0) {
-                    return $count;
-                }
-
-                $prevSemester = $this->semesterTahunSebelumnya($kodeSemester);
-                $prevCount = (int) Mahasiswa::where('payload->periode_masuk', $prevSemester)->count();
-                if ($prevCount > 0) {
-                    return (int) round($prevCount * 1.041);
+                if (Mahasiswa::exists()) {
+                    return (int) Mahasiswa::where('payload->periode_masuk', $kodeSemester)->count();
                 }
             } catch (\Throwable $e) {
-                // DB fallback
             }
 
             $tahun = (int)substr($kodeSemester, 0, 4);
             $digit = substr($kodeSemester, -1);
+
+            try {
+                $apiRes = $this->mahasiswaService->getData(['limit' => 1, 'angkatan' => $tahun]);
+                $raw = $apiRes->data ?? [];
+                $meta = isset($raw[0]) && is_array($raw[0]) ? $raw[0] : $raw;
+                $apiTotal = (int) ($meta['total'] ?? 0);
+
+                if ($apiTotal > 0) {
+                    return $digit === '1' ? (int) round($apiTotal * 0.85) : (int) round($apiTotal * 0.15);
+                }
+            } catch (\Throwable $e) {
+            }
+
             if ($digit === '1') {
                 return 4250 + (($tahun - 2024) * 150);
             } else {

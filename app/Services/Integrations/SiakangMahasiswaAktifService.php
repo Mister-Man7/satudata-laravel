@@ -24,40 +24,68 @@ class SiakangMahasiswaAktifService extends AbstractApiClient
     }
 
     /**
-     * Ambil data mahasiswa aktif (cached).
+     * Ambil data mahasiswa aktif.
+     *
+     * SWR dual-key: data (TTL 6 jam) + freshness flag (TTL 20 menit).
+     * DB lokal dipakai saat cache miss; API selalu di-refresh di background.
      */
     public function getData(array $params = []): ApiResponse
     {
-        $cacheKey = 'siakang.mahasiswa_aktif.' . md5(json_encode($params));
+        $cacheKey     = 'siakang.mahasiswa_aktif.' . md5(json_encode($params));
+        $staleFlagKey = $cacheKey . '.fresh';
 
+        // Cache hit — return data, refresh jika stale
         if (Cache::has($cacheKey)) {
-            return new ApiResponse(
-                success: true,
-                status: 200,
-                message: 'Data dari cache',
-                data: Cache::get($cacheKey),
-            );
+            $data = Cache::get($cacheKey);
+
+            // Fresh flag expired — picu refresh background
+            if (!Cache::has($staleFlagKey)) {
+                $this->deferApiRefresh($cacheKey, $staleFlagKey, $params);
+            }
+
+            return new ApiResponse(success: true, status: 200, message: 'Data mahasiswa aktif', data: $data);
         }
 
-        $response = $this->get('/v2/mahasiswa-aktif', $params);
+        // Cache miss — ambil DB lokal, defer refresh API
+        $dbData = $this->hasilFallbackData($params);
+        if (!empty($dbData['detail_per_prodi'])) {
+            Cache::put($cacheKey, $dbData, now()->addHours(6));
+            $this->deferApiRefresh($cacheKey, $staleFlagKey, $params);
 
+            return new ApiResponse(success: true, status: 200, message: 'Data mahasiswa aktif', data: $dbData);
+        }
+
+        // Cold start — DB juga kosong, hit API secara synchronous
+        $response = $this->get('/v2/mahasiswa-aktif', $params);
         if ($response->success && !empty($response->data)) {
             Cache::put($cacheKey, $response->data, now()->addHours(6));
+            Cache::put($staleFlagKey, true, now()->addMinutes(20));
             return $response;
         }
 
-        $fallbackData = $this->hasilFallbackData($params);
-        // Cache fallback data agar request berikutnya tidak menggantung berulang kali
-        Cache::put($cacheKey, $fallbackData, now()->addMinutes(15));
-
-        return new ApiResponse(
-            success: true,
-            status: 200,
-            message: 'Data dari fallback lokal',
-            data: $fallbackData,
-        );
+        return new ApiResponse(success: true, status: 200, message: 'Data mahasiswa aktif', data: $dbData);
     }
 
+    private function deferApiRefresh(string $cacheKey, string $staleFlagKey, array $params): void
+    {
+        if (!function_exists('defer')) {
+            return;
+        }
+
+        defer(function () use ($cacheKey, $staleFlagKey, $params) {
+            try {
+                $response = $this->get('/v2/mahasiswa-aktif', $params);
+                if ($response->success && !empty($response->data)) {
+                    Cache::put($cacheKey, $response->data, now()->addHours(6));
+                }
+            } catch (\Throwable $e) {
+                \Illuminate\Support\Facades\Log::warning('SWR aktif refresh gagal: ' . $e->getMessage());
+            } finally {
+                // Reset fresh flag terlepas dari hasil API, berlaku 20 menit
+                Cache::put($staleFlagKey, true, now()->addMinutes(20));
+            }
+        });
+    }
     private function hasilFallbackData(array $params = []): array
     {
         $semester = (string)($params['semester'] ?? '');

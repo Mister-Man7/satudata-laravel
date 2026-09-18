@@ -15,21 +15,50 @@
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@mdi/font@7.4.47/css/materialdesignicons.min.css">
     @vite(['resources/css/app.css', 'resources/js/app.js'])
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js" defer></script>
+    <script>
+        if (localStorage.getItem('sidebar_collapsed') === 'true') {
+            document.documentElement.classList.add('sidebar-collapsed');
+        }
+    </script>
 </head>
 
-<body class="h-full">
+<body class="h-full bg-gray-100 antialiased">
 
-    <div class="min-h-full">
-        <x-navbar></x-navbar>
+    <div x-data="{
+            sidebarCollapsed: localStorage.getItem('sidebar_collapsed') === 'true',
+            mobileSidebarOpen: false,
+            toggleSidebar() {
+                document.documentElement.classList.add('sidebar-animated');
+                this.sidebarCollapsed = !this.sidebarCollapsed;
+                localStorage.setItem('sidebar_collapsed', this.sidebarCollapsed);
+                document.documentElement.classList.toggle('sidebar-collapsed', this.sidebarCollapsed);
+                setTimeout(() => {
+                    window.dispatchEvent(new Event('resize'));
+                    document.documentElement.classList.remove('sidebar-animated');
+                }, 260);
+            },
+            toggleMobileSidebar() {
+                this.mobileSidebarOpen = !this.mobileSidebarOpen;
+            },
+            closeMobileSidebar() {
+                this.mobileSidebarOpen = false;
+            }
+        }"
+        @keydown.escape.window="closeMobileSidebar()"
+        class="min-h-full">
 
-        <x-header>{{ $title }}</x-header>
+        <x-sidebar></x-sidebar>
 
-        <main>
-            <div class="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
-                {{ $slot }}
-            </div>
-        </main>
-        <x-footer></x-footer>
+        <div class="satudata-content-wrapper flex min-h-screen flex-col">
+            <x-topbar :title="$title ?? ''"></x-topbar>
+
+            <main class="flex-1">
+                <div class="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
+                    {{ $slot }}
+                </div>
+            </main>
+            <x-footer></x-footer>
+        </div>
     </div>
 
     <x-tirta-agent-chat></x-tirta-agent-chat>
