@@ -287,7 +287,7 @@
                                 <td class="px-6 py-4.5 text-right">
                                     @if (!empty($nipDosen))
                                         <a href="{{ $profilUrl }}"
-                                           class="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold bg-indigo-50 text-indigo-600 hover:bg-indigo-600 hover:text-white transition shadow-sm">
+                                           class="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold bg-indigo-50 text-indigo-600 hover:bg-indigo-600 hover:text-white transition shadow-sm">
                                             <span>Profil &amp; SIPP</span>
                                             <i class="fa-solid fa-chevron-right text-[10px]"></i>
                                         </a>

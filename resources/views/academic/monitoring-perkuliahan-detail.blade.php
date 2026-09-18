@@ -453,6 +453,22 @@
             exportExcel();
             alert('Untuk PDF, gunakan Print → Save as PDF');
         }
+
+        // Loading overlay on navigation & pagination
+        const overlay = document.getElementById('loadingOverlay');
+        const showLoading = () => {
+            if (overlay) overlay.classList.remove('hidden');
+        };
+
+        document.querySelectorAll('a[href*="/akademik/perkuliahan"]').forEach(link => {
+            link.addEventListener('click', function(e) {
+                if (!e.ctrlKey && !e.metaKey && !e.shiftKey && link.target !== '_blank') {
+                    showLoading();
+                }
+            });
+        });
     </script>
     @endpush
+
+    <x-ui.loading-overlay id="loadingOverlay" text="Memuat data perkuliahan..." />
 </x-layout>

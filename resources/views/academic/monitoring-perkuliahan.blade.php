@@ -260,6 +260,27 @@
         document.getElementById('modalGantiSemester')?.addEventListener('click', function(e) {
             if (e.target === this) closeModal();
         });
+
+        // Loading overlay on semester change & table navigation
+        const overlay = document.getElementById('loadingOverlay');
+        const showLoading = () => {
+            if (overlay) overlay.classList.remove('hidden');
+        };
+
+        document.querySelector('#modalGantiSemester form')?.addEventListener('submit', function() {
+            closeModal();
+            showLoading();
+        });
+
+        document.querySelectorAll('a[href*="/akademik/perkuliahan"]').forEach(link => {
+            link.addEventListener('click', function(e) {
+                if (!e.ctrlKey && !e.metaKey && !e.shiftKey && link.target !== '_blank') {
+                    showLoading();
+                }
+            });
+        });
     </script>
     @endpush
+
+    <x-ui.loading-overlay id="loadingOverlay" text="Memuat data perkuliahan..." />
 </x-layout>

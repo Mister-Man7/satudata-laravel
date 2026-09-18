@@ -8,6 +8,7 @@ use App\Services\DTO\ApiResponse;
 use App\Services\Integrations\SiakangLulusanService;
 use App\Services\Integrations\SiakangMahasiswaAktifService;
 use App\Services\Integrations\SimpegPegawaiService;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
@@ -29,32 +30,43 @@ class AkademikController extends Controller
         $tahunMulai = $tahunNow - 8;
         $tahunSelesai = $tahunNow - 1;
 
-        try {
-            $peminatPerJalur = Mahasiswa::selectRaw('angkatan, count(*) as total')
-                ->whereBetween('angkatan', [$tahunMulai, $tahunSelesai])
-                ->groupBy('angkatan')
-                ->orderBy('angkatan', 'asc')
-                ->pluck('total', 'angkatan')
-                ->toArray();
+        [$peminatPerJalur, $chartPeminat] = Cache::remember("akademik_chart_peminat_{$tahunNow}", now()->addHours(12), function () use ($tahunMulai, $tahunSelesai) {
+            try {
+                $peminatPerJalur = Mahasiswa::selectRaw('angkatan, count(*) as total')
+                    ->whereBetween('angkatan', [$tahunMulai, $tahunSelesai])
+                    ->groupBy('angkatan')
+                    ->orderBy('angkatan', 'asc')
+                    ->pluck('total', 'angkatan')
+                    ->toArray();
 
-            $chartPeminat = [];
-            for ($tahun = $tahunMulai; $tahun <= $tahunSelesai; $tahun++) {
-                $chartPeminat[$tahun] = [
-                    'Seleksi Nasional' => Mahasiswa::where('angkatan', $tahun)
-                        ->whereIn('jalur_masuk_id', ['snbp', 'snbt', 'snmptn', 'sbmptn'])->count(),
-                    'Seleksi Mandiri' => Mahasiswa::where('angkatan', $tahun)
-                        ->whereIn('jalur_masuk_id', ['sm', 'ujian-mandiri', 'smmptn-barat', 'seleksi-mandiri-berdasarkan-test', 'smptn', 'umb'])->count(),
-                    'Lainnya' => Mahasiswa::where('angkatan', $tahun)
-                        ->whereNotIn('jalur_masuk_id', ['snbp', 'snbt', 'snmptn', 'sbmptn', 'smptn', 'sm', 'ujian-mandiri', 'smmptn-barat', 'seleksi-mandiri-berdasarkan-test', 'umb'])->count(),
-                ];
+                // 1 query terkumpul alih-alih 24 queries berulang pada 80.000+ data
+                $rawData = Mahasiswa::selectRaw('angkatan, jalur_masuk_id, count(*) as total')
+                    ->whereBetween('angkatan', [$tahunMulai, $tahunSelesai])
+                    ->groupBy('angkatan', 'jalur_masuk_id')
+                    ->get();
+
+                $snJalur = ['snbp', 'snbt', 'snmptn', 'sbmptn'];
+                $smJalur = ['sm', 'ujian-mandiri', 'smmptn-barat', 'seleksi-mandiri-berdasarkan-test', 'smptn', 'umb'];
+
+                $chartPeminat = [];
+                for ($tahun = $tahunMulai; $tahun <= $tahunSelesai; $tahun++) {
+                    $rowsTahun = $rawData->where('angkatan', $tahun);
+                    $chartPeminat[$tahun] = [
+                        'Seleksi Nasional' => (int) $rowsTahun->whereIn('jalur_masuk_id', $snJalur)->sum('total'),
+                        'Seleksi Mandiri'  => (int) $rowsTahun->whereIn('jalur_masuk_id', $smJalur)->sum('total'),
+                        'Lainnya'          => (int) $rowsTahun->whereNotIn('jalur_masuk_id', array_merge($snJalur, $smJalur))->sum('total'),
+                    ];
+                }
+
+                return [$peminatPerJalur, $chartPeminat];
+            } catch (\Throwable $e) {
+                $chartPeminat = [];
+                for ($tahun = $tahunMulai; $tahun <= $tahunSelesai; $tahun++) {
+                    $chartPeminat[$tahun] = ['Seleksi Nasional' => 1200, 'Seleksi Mandiri' => 800, 'Lainnya' => 300];
+                }
+                return [[], $chartPeminat];
             }
-        } catch (\Throwable $e) {
-            $peminatPerJalur = [];
-            $chartPeminat = [];
-            for ($tahun = $tahunMulai; $tahun <= $tahunSelesai; $tahun++) {
-                $chartPeminat[$tahun] = ['Seleksi Nasional' => 1200, 'Seleksi Mandiri' => 800, 'Lainnya' => 300];
-            }
-        }
+        });
 
         // Daftar semester yang tersedia di dropdown
         $daftarSemester = $this->daftarSemester($tahunNow);
@@ -66,18 +78,19 @@ class AkademikController extends Controller
             // Pengguna memilih semester secara eksplisit
             $kodeSemesterTampil = $semesterPilihan;
         } else {
-            // Auto-detect semester berjalan dengan fallback
-            $kodeSemesterBerjalan = $waktuSekarang->month < 8
-                ? ($waktuSekarang->year - 1) . '2'
-                : $waktuSekarang->year . '1';
-            $kodeSemesterLalu = $this->semesterSebelumnya($kodeSemesterBerjalan);
+            // Auto-detect semester berjalan dengan cache agar tidak membebani network probe di setiap request
+            $kodeSemesterTampil = Cache::remember('akademik_auto_detected_semester', now()->addHours(6), function () use ($waktuSekarang) {
+                $kodeSemesterBerjalan = $waktuSekarang->month < 8
+                    ? ($waktuSekarang->year - 1) . '2'
+                    : $waktuSekarang->year . '1';
+                $kodeSemesterLalu = $this->semesterSebelumnya($kodeSemesterBerjalan);
 
-            $responseAktifProbe = $this->aktifService->getData(['semester' => $kodeSemesterBerjalan]);
-            if ($this->dataMahasiswaAktifTersedia($responseAktifProbe)) {
-                $kodeSemesterTampil = $kodeSemesterBerjalan;
-            } else {
-                $kodeSemesterTampil = $kodeSemesterLalu;
-            }
+                $responseAktifProbe = $this->aktifService->getData(['semester' => $kodeSemesterBerjalan]);
+                if ($this->dataMahasiswaAktifTersedia($responseAktifProbe)) {
+                    return $kodeSemesterBerjalan;
+                }
+                return $kodeSemesterLalu;
+            });
         }
 
         $responseAktif = $this->aktifService->getData(['semester' => $kodeSemesterTampil]);
@@ -413,28 +426,30 @@ class AkademikController extends Controller
      */
     private function totalMahasiswaBaru(string $kodeSemester): int
     {
-        try {
-            $count = (int) Mahasiswa::where('payload->periode_masuk', $kodeSemester)->count();
-            if ($count > 0) {
-                return $count;
+        return Cache::remember("akademik_total_mhs_baru_{$kodeSemester}", now()->addHours(12), function () use ($kodeSemester) {
+            try {
+                $count = (int) Mahasiswa::where('payload->periode_masuk', $kodeSemester)->count();
+                if ($count > 0) {
+                    return $count;
+                }
+
+                $prevSemester = $this->semesterTahunSebelumnya($kodeSemester);
+                $prevCount = (int) Mahasiswa::where('payload->periode_masuk', $prevSemester)->count();
+                if ($prevCount > 0) {
+                    return (int) round($prevCount * 1.041);
+                }
+            } catch (\Throwable $e) {
+                // DB fallback
             }
 
-            $prevSemester = $this->semesterTahunSebelumnya($kodeSemester);
-            $prevCount = (int) Mahasiswa::where('payload->periode_masuk', $prevSemester)->count();
-            if ($prevCount > 0) {
-                return (int) round($prevCount * 1.041);
+            $tahun = (int)substr($kodeSemester, 0, 4);
+            $digit = substr($kodeSemester, -1);
+            if ($digit === '1') {
+                return 4250 + (($tahun - 2024) * 150);
+            } else {
+                return 850 + (($tahun - 2024) * 40);
             }
-        } catch (\Throwable $e) {
-            // DB fallback
-        }
-
-        $tahun = (int)substr($kodeSemester, 0, 4);
-        $digit = substr($kodeSemester, -1);
-        if ($digit === '1') {
-            return 4250 + (($tahun - 2024) * 150);
-        } else {
-            return 850 + (($tahun - 2024) * 40);
-        }
+        });
     }
 
 

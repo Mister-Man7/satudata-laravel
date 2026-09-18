@@ -38,17 +38,10 @@
         </div>
 
         <!-- Top Row -->
-        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
-            <div class="lg:col-span-2 rounded-2xl border border-gray-100 bg-white shadow-sm p-6 md:p-8">
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+            <div class="lg:col-span-1 rounded-2xl border border-gray-100 bg-white shadow-sm p-6 md:p-8">
                 <div class="flex flex-col md:flex-row items-start gap-6">
-                    <div class="relative shrink-0 mx-auto md:mx-0">
-                        <div class="w-28 h-28 md:w-32 md:h-32 rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white text-4xl font-bold shadow-lg">
-                            {{ strtoupper(substr($profile['nama'] ?? 'D', 0, 1)) }}
-                        </div>
-                        <div class="absolute -bottom-2 -right-2 bg-teal-700 text-white p-1.5 rounded-xl shadow-md border-2 border-white">
-                            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="3" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"></path></svg>
-                        </div>
-                    </div>
+
                     <div class="flex-1 w-full text-center md:text-left">
                         <h2 class="text-2xl md:text-3xl font-bold text-slate-900 tracking-tight">{{ $profile['nama'] ?? '-' }}</h2>
                         <div class="mt-3 space-y-2 text-sm md:text-base text-slate-600">

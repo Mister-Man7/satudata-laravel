@@ -7,7 +7,17 @@
         $daftarStatistik = $datas ?? [];
     @endphp
 
-    <section class="mx-auto max-w-7xl px-4 py-4 sm:px-6 lg:px-8">
+    <section class="mx-auto max-w-7xl px-4 py-4 sm:px-6 lg:px-8 relative"
+        x-data="{
+            open: false,
+            isSwitching: false,
+            targetSemester: ''
+        }"
+        x-init="window.addEventListener('pageshow', () => { isSwitching = false; })">
+
+        {{-- Komponen Loading Overlay Umum --}}
+        <x-ui.loading-overlay show="isSwitching" />
+
         <div class="mb-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
             <h1 class="font-bold text-2xl text-gray-800">
                 Ringkasan Data Mahasiswa
@@ -16,14 +26,25 @@
             @php
                 $labelSemesterAktif = $daftarSemester[$kodeSemesterTampil] ?? $kodeSemesterTampil;
             @endphp
-            <div class="relative inline-block" x-data="{ open: false }">
-                <button @click="open = !open" @keydown.escape="open = false"
-                    class="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-colors cursor-pointer">
-                    <i class="fa-solid fa-filter text-xs text-blue-200"></i>
-                    <span>Semester: <strong>{{ $labelSemesterAktif }}</strong></span>
-                    <svg class="h-4 w-4 transition-transform duration-200" :class="{ 'rotate-180': open }" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
-                    </svg>
+            <div class="relative inline-block">
+                <button @click="if (!isSwitching) open = !open" @keydown.escape="open = false"
+                    :disabled="isSwitching"
+                    class="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-colors cursor-pointer disabled:opacity-75 disabled:cursor-wait">
+                    <template x-if="!isSwitching">
+                        <span class="inline-flex items-center gap-2">
+                            <i class="fa-solid fa-filter text-xs text-blue-200"></i>
+                            <span>Semester: <strong>{{ $labelSemesterAktif }}</strong></span>
+                            <svg class="h-4 w-4 transition-transform duration-200" :class="{ 'rotate-180': open }" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+                            </svg>
+                        </span>
+                    </template>
+                    <template x-if="isSwitching">
+                        <span class="inline-flex items-center gap-2">
+                            <i class="fa-solid fa-circle-notch fa-spin text-sm text-white"></i>
+                            <span>Memuat data...</span>
+                        </span>
+                    </template>
                 </button>
                 <div x-show="open" @click.outside="open = false" x-cloak
                     x-transition:enter="transition ease-out duration-100"
@@ -36,6 +57,7 @@
                     <div class="py-1">
                         @foreach ($daftarSemester as $kode => $label)
                             <a href="{{ route('akademik', ['semester' => $kode]) }}"
+                                @click="if ('{{ $kode }}' !== '{{ $kodeSemesterTampil }}') { isSwitching = true; targetSemester = '{{ addslashes($label) }}'; open = false; }"
                                 class="block px-4 py-2.5 text-sm transition-colors
                                     {{ $kode === $kodeSemesterTampil
                                         ? 'bg-blue-50 text-blue-700 font-semibold'

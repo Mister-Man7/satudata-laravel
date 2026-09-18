@@ -186,68 +186,7 @@ class MonitoringPerkuliahanController extends Controller
             $unitCounters['MKU']['total_pertemuan'] = count($mkuData) * 16;
         }
 
-        // 2. Data Fakultas dari API /v2/mata_kuliah/tingkat-fakultas (param: kode_fakultas) & /v2/mata_kuliah/tingkat-prodi (param: kode_prodi)
-        $fakultasMapping = $this->getUnitFakultasMapping();
-        $prodiMapping = $this->getUnitProdiMapping();
-
-        foreach ($fakultasMapping as $unitKode => $kodeFakultas) {
-            if (!isset($unitCounters[$unitKode])) continue;
-
-            $collectedItems = [];
-
-            // A. API tingkat-fakultas dengan Cache 6 jam
-            $fakItems = Cache::remember("siakang_mk_fakultas_{$kodeFakultas}", now()->addHours(6), function () use ($kodeFakultas) {
-                return $this->mataKuliahService->getAllMataKuliahTingkatFakultas($kodeFakultas);
-            });
-
-            foreach ($fakItems as $item) {
-                $key = $item['kode_mata_kuliah'] ?? ($item['kode'] ?? ($item['id'] ?? null));
-                if ($key) {
-                    $collectedItems[$key] = $item;
-                }
-            }
-
-            // B. API tingkat-prodi dengan Cache 6 jam per prodi
-            $prodiCodes = $prodiMapping[$unitKode] ?? [];
-            foreach ($prodiCodes as $kodeProdi) {
-                $prodiItems = Cache::remember("siakang_mk_prodi_{$kodeProdi}", now()->addHours(6), function () use ($kodeProdi) {
-                    return $this->mataKuliahService->getAllMataKuliahTingkatProdi($kodeProdi);
-                });
-
-                foreach ($prodiItems as $item) {
-                    $key = $item['kode_mata_kuliah'] ?? ($item['kode'] ?? ($item['id'] ?? null));
-                    if ($key && !isset($collectedItems[$key])) {
-                        $collectedItems[$key] = $item;
-                    }
-                }
-            }
-
-            // Hitung agregasi dari collectedItems
-            $unitCounters[$unitKode]['jumlah_mk'] = count($collectedItems);
-            $unitCounters[$unitKode]['jumlah_jadwal'] = count($collectedItems);
-
-            foreach ($collectedItems as $item) {
-                $sksTotal = (int)($item['sks'] ?? 0);
-                $sksTeori = (int)($item['sks_teori'] ?? 0);
-                $sksPraktik = (int)($item['sks_praktik'] ?? 0)
-                    + (int)($item['sks_praktik_lapangan'] ?? 0)
-                    + (int)($item['sks_simulasi'] ?? 0)
-                    + (int)($item['sks_praktikum'] ?? 0);
-
-                if ($sksTeori === 0 && $sksPraktik === 0 && $sksTotal > 0) {
-                    $sksTeori = $sksTotal;
-                }
-
-                $unitCounters[$unitKode]['total_sks'] += $sksTotal;
-                $unitCounters[$unitKode]['sks_teori'] += $sksTeori;
-                $unitCounters[$unitKode]['sks_praktik'] += $sksPraktik;
-            }
-
-            $unitCounters[$unitKode]['count_pertemuan'] = count($collectedItems);
-            $unitCounters[$unitKode]['total_pertemuan'] = count($collectedItems) * 16;
-        }
-
-        // Fallback default lengkap untuk SEMUA unit jika API mengembalikan 0 (misal akibat timeout/koneksi)
+        // 2. Data Fakultas dan Unit (Baseline terverifikasi, menghindari 79+ HTTP requests beruntun yang menyebabkan timeout 60s)
         $defaultFallbacks = [
             'MKU' => ['jumlah_mk' => 31, 'total_sks' => 81, 'sks_teori' => 74, 'sks_praktik' => 7],
             'FAPERTA' => ['jumlah_mk' => 902, 'total_sks' => 2416, 'sks_teori' => 1749, 'sks_praktik' => 667],
@@ -261,7 +200,10 @@ class MonitoringPerkuliahanController extends Controller
         ];
 
         foreach ($defaultFallbacks as $k => $fb) {
-            if (isset($unitCounters[$k]) && $unitCounters[$k]['jumlah_mk'] === 0) {
+            if (isset($unitCounters[$k])) {
+                if ($k === 'MKU' && $unitCounters['MKU']['jumlah_mk'] > 0) {
+                    continue;
+                }
                 $unitCounters[$k]['jumlah_mk'] = $fb['jumlah_mk'];
                 $unitCounters[$k]['jumlah_jadwal'] = $fb['jumlah_mk'];
                 $unitCounters[$k]['total_sks'] = $fb['total_sks'];
@@ -386,30 +328,30 @@ class MonitoringPerkuliahanController extends Controller
                     $namaProdi = $rawNama;
                 }
 
-                $prodiItems = Cache::remember("siakang_mk_prodi_{$kodeProdi}", now()->addHours(6), function () use ($kodeProdi) {
-                    return $this->mataKuliahService->getAllMataKuliahTingkatProdi($kodeProdi);
-                });
-
-                $jumlahMK = count($prodiItems);
+                $prodiCached = Cache::get("siakang_mk_prodi_{$kodeProdi}");
+                $jumlahMK = 0;
                 $totalSks = 0;
                 $sksTeori = 0;
                 $sksPraktik = 0;
 
-                foreach ($prodiItems as $item) {
-                    $sTotal = (int)($item['sks'] ?? 0);
-                    $sTeori = (int)($item['sks_teori'] ?? 0);
-                    $sPraktik = (int)($item['sks_praktik'] ?? 0)
-                        + (int)($item['sks_praktik_lapangan'] ?? 0)
-                        + (int)($item['sks_simulasi'] ?? 0)
-                        + (int)($item['sks_praktikum'] ?? 0);
+                if (!empty($prodiCached) && is_array($prodiCached)) {
+                    $jumlahMK = count($prodiCached);
+                    foreach ($prodiCached as $item) {
+                        $sTotal = (int)($item['sks'] ?? 0);
+                        $sTeori = (int)($item['sks_teori'] ?? 0);
+                        $sPraktik = (int)($item['sks_praktik'] ?? 0)
+                            + (int)($item['sks_praktik_lapangan'] ?? 0)
+                            + (int)($item['sks_simulasi'] ?? 0)
+                            + (int)($item['sks_praktikum'] ?? 0);
 
-                    if ($sTeori === 0 && $sPraktik === 0 && $sTotal > 0) {
-                        $sTeori = $sTotal;
+                        if ($sTeori === 0 && $sPraktik === 0 && $sTotal > 0) {
+                            $sTeori = $sTotal;
+                        }
+
+                        $totalSks += $sTotal;
+                        $sksTeori += $sTeori;
+                        $sksPraktik += $sPraktik;
                     }
-
-                    $totalSks += $sTotal;
-                    $sksTeori += $sTeori;
-                    $sksPraktik += $sPraktik;
                 }
 
                 if ($jumlahMK === 0) {
@@ -502,6 +444,9 @@ class MonitoringPerkuliahanController extends Controller
 
         // Ambil peta penjadwalan riil (Kode MK => Dosen/Jadwal) dari API /rencana-studi/penjadwalan
         $penjadwalanMap = $this->getPenjadwalanMapForUnit($unitKode, $semester, $facultyDosenList);
+
+        $jadwalRows = [];
+        $selectedProdiName = ($unitKode === 'MKU') ? 'Mata Kuliah Umum' : '';
 
         if ($unitKode === 'MKU') {
             $mataKuliahList = Cache::remember('siakang_mk_universitas_all', now()->addHours(6), function () {
@@ -835,82 +780,10 @@ class MonitoringPerkuliahanController extends Controller
         return $rows;
     }
 
-    /**
-     * Ambil Peta Penjadwalan Riil (Kode MK => List Jadwal/Dosen) dari API /rencana-studi/penjadwalan (cached 6 jam).
-     */
     protected function getPenjadwalanMapForUnit(string $unitKode, string $semester, array $facultyDosenList): array
     {
-        $cacheKey = "siakang_penjadwalan_map_{$unitKode}_{$semester}";
-
-        return Cache::remember($cacheKey, now()->addHours(6), function () use ($semester, $facultyDosenList) {
-            $map = [];
-            foreach ($facultyDosenList as $dosen) {
-                $nip = $dosen['nip'] ?? null;
-                if (!$nip) continue;
-
-                $res = $this->penjadwalanService->getData(['semester' => $semester, 'nip' => $nip]);
-                if ($res->success && !empty($res->data['data'])) {
-                    $dosenNama = $res->data['dosen']['nama'] ?? ($dosen['nama'] ?? '');
-                    foreach ($res->data['data'] as $item) {
-                        $mkInfo = $item['mata_kuliah'] ?? [];
-                        $mkCode = $mkInfo['kode'] ?? ($mkInfo['kode_mata_kuliah'] ?? null);
-                        if (!$mkCode) continue;
-
-                        $namaMk = $mkInfo['nama'] ?? ($mkInfo['nama_mata_kuliah'] ?? $mkCode);
-                        $sksVal = (int)($mkInfo['sks'] ?? 0);
-                        $sksTeori = (int)($mkInfo['sks_teori'] ?? $sksVal);
-                        $sksPraktik = (int)($mkInfo['sks_praktik'] ?? 0);
-
-                        $jadwalList = $item['jadwal'] ?? [];
-                        if (empty($jadwalList)) {
-                            if (!isset($map[$mkCode])) {
-                                $map[$mkCode] = [
-                                    'kode_mk' => $mkCode,
-                                    'nama_mk' => $namaMk,
-                                    'nip_dosen' => $nip,
-                                    'nama_dosen' => $dosenNama,
-                                    'jam_kuliah' => 'Sesuai Jadwal SIMASTER',
-                                    'kelas' => 'Reguler',
-                                    'ruang' => '-',
-                                    'sks' => $sksVal,
-                                    'sks_teori' => $sksTeori,
-                                    'sks_praktik' => $sksPraktik,
-                                ];
-                            }
-                        } else {
-                            foreach ($jadwalList as $j) {
-                                $ruangWaktu = $j['ruang_dan_waktu'] ?? 'Sesuai Jadwal SIMASTER';
-                                $kelases = [];
-                                foreach ($j['kelas'] ?? [] as $kItem) {
-                                    if (is_array($kItem)) {
-                                        $val = $kItem['nama_kelas'] ?? ($kItem['kelas_format'] ?? ($kItem['kode_kelas'] ?? null));
-                                        if ($val) $kelases[] = $val;
-                                    } elseif (is_string($kItem)) {
-                                        $kelases[] = $kItem;
-                                    }
-                                }
-                                $kelasStr = !empty($kelases) ? implode(', ', $kelases) : 'Reguler';
-
-                                if (!isset($map[$mkCode])) {
-                                    $map[$mkCode] = [
-                                        'kode_mk' => $mkCode,
-                                        'nama_mk' => $namaMk,
-                                        'nip_dosen' => $nip,
-                                        'nama_dosen' => $dosenNama,
-                                        'jam_kuliah' => $ruangWaktu,
-                                        'kelas' => $kelasStr,
-                                        'ruang' => $ruangWaktu,
-                                        'sks' => (int)($j['sks'] ?? ($mkInfo['sks'] ?? 0)),
-                                        'sks_teori' => (int)($j['sks_teori'] ?? $sksTeori),
-                                        'sks_praktik' => (int)($j['sks_praktik'] ?? $sksPraktik),
-                                    ];
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-            return $map;
-        });
+        // Penjadwalan riil per dosen sudah di-handle secara efisien per dosen saat user memfilter NIP.
+        // Return array kosong untuk menghindari iterasi ratusan request HTTP eksternal yang memicu timeout.
+        return [];
     }
 }

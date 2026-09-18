@@ -421,18 +421,28 @@ class AsetController extends Controller
 
         $gedungList = $response['data']['data'] ?? $response['data'] ?? [];
         $datas = collect($gedungList)->map(function ($ruangan) {
+            $totalStr = isset($ruangan['total_aset']) && $ruangan['total_aset'] > 0
+                ? number_format($ruangan['total_aset'], 0, ',', '.') . ' Unit BMN'
+                : 'Lihat Aset';
+
             return [
                 'id' => $ruangan['id_ruangan'],
                 'title' => $ruangan['nama_ruangan'] ?? 'Nama Ruangan',
-                'count' => 'Lihat Aset',
+                'count' => $totalStr,
                 'icon' => 'door',
                 'updated' => $ruangan['updated_at'] ?? now(),
             ];
         });
 
+        $namaGedung = ucwords(strtolower(trim(str_replace(['GEDUNG-', '-'], [' ', ' '], $gedungId))));
+        if (empty($namaGedung)) {
+            $namaGedung = 'Gedung';
+        }
+
         return view('Assets.aset', compact('datas'), [
-            'title' => 'Ruangan',
-            'level' => 'ruangan'
+            'title' => 'Ruangan - ' . $namaGedung,
+            'level' => 'ruangan',
+            'parentTitle' => $namaGedung,
         ]);
     }
 
@@ -541,15 +551,36 @@ class AsetController extends Controller
     public function bmn($ruanganId, Request $request)
     {
         $params = $request->only(['per_page', 'status_sewa', 'kondisi', 'all']);
-        $params['per_page'] = $params['per_page'] ?? 100;
+        $params['per_page'] = $params['per_page'] ?? 1000;
 
         $response = $this->apiService->makeRequest('GET', "bmn-all/by-ruangan/{$ruanganId}", $params);
-        $bmnList = $response['data']['data'] ?? $response['data'] ?? [];
+        $rawList = $response['data']['data'] ?? $response['data'] ?? [];
+        $bmnList = collect($rawList);
+
+        $namaRuangan = null;
+        if ($bmnList->isNotEmpty()) {
+            $first = $bmnList->first();
+            $lok = is_array($first) ? ($first['lokasi_lengkap'] ?? '') : ($first->lokasi_lengkap ?? '');
+            if (!empty($lok)) {
+                $lParts = array_map('trim', explode('-', $lok));
+                $namaRuangan = end($lParts);
+            }
+        }
+
+        if (empty($namaRuangan)) {
+            $cleanSlug = preg_replace('/^RUANG-/i', '', $ruanganId);
+            $namaRuangan = ucwords(strtolower(trim(str_replace('-', ' ', $cleanSlug))));
+        }
+        if (empty($namaRuangan)) {
+            $namaRuangan = 'Ruang Operasional';
+        }
 
         return view('Assets.aset-bmn', [
-            'title' => 'Daftar Inventaris Ruangan',
+            'title' => 'Inventaris ' . $namaRuangan,
+            'ruanganName' => $namaRuangan,
+            'ruanganId' => $ruanganId,
             'level' => 'bmn',
-            'bmnList' => collect($bmnList)
+            'bmnList' => $bmnList
         ]);
     }
 

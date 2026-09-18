@@ -41,12 +41,15 @@ class SiakangLulusanService extends AbstractApiClient
 
         $response = $this->get('/v2/mahasiswa-lulus', $params);
 
-        if ($response->success) {
-            Cache::put($cacheKey, $response->data, now()->addMinutes(10));
+        if ($response->success && !empty($response->data)) {
+            Cache::put($cacheKey, $response->data, now()->addHours(6));
             return $response;
         }
 
         $fallbackData = $this->hasilFallbackLulusanData($params);
+        // Cache fallback data agar request berikutnya tidak menggantung berulang kali
+        Cache::put($cacheKey, $fallbackData, now()->addMinutes(15));
+
         return new ApiResponse(
             success: true,
             status: 200,
