@@ -18,6 +18,7 @@ class SIPPService extends AbstractApiClient
         return [
             'base_url' => config('services.sipp.base_url', 'https://sipp.untirta.ac.id'),
             'auth_type' => 'bearer_login',
+            'cf_clearance' => config('services.sipp.cf_clearance'),
             // Timeout dialokasikan agar saat cache & database kosong, request API tidak terputus prematur
             'connect_timeout' => 10,
             'timeout' => 60,
@@ -25,7 +26,16 @@ class SIPPService extends AbstractApiClient
     }
 
     /**
-     * Override buildRequest untuk menambahkan browser headers & cf_clearance cookie
+     * UA default SIPP mengikuti PostmanRuntime agar selaras dengan pengambilan
+     * data manual sebelumnya. Dapat diganti lewat SIPP_API_USER_AGENT.
+     */
+    protected function userAgentDefault(): string
+    {
+        return 'PostmanRuntime/7.43.0';
+    }
+
+    /**
+     * Override buildRequest untuk menambahkan browser headers & cookie cf_clearance
      * agar bisa bypass Cloudflare challenge yang memblokir request PHP.
      */
     protected function buildRequest(array $config): \Illuminate\Http\Client\PendingRequest
@@ -34,14 +44,8 @@ class SIPPService extends AbstractApiClient
 
         $headers = [
             'Accept'     => 'application/json',
-            'User-Agent' => 'PostmanRuntime/7.43.0',
+            'User-Agent' => $this->userAgent(),
         ];
-
-        // Tambahkan cf_clearance cookie jika dikonfigurasi di env
-        $cfClearance = config('services.sipp.cf_clearance', '');
-        if (!empty($cfClearance)) {
-            $headers['Cookie'] = 'cf_clearance=' . $cfClearance;
-        }
 
         return $request->withHeaders($headers);
     }
@@ -271,7 +275,7 @@ class SIPPService extends AbstractApiClient
 
     public function getBukuReferensi(string $nip, array $params = []): ApiResponse
     {
-        $params['jenis'] = 'buku_referensi';
+        $params['type'] = 'buku_referensi';
         $params['nip']   = $nip;
         return $this->getWithSwr('/api/sipp', $params);
     }
@@ -405,7 +409,7 @@ class SIPPService extends AbstractApiClient
                     foreach ($missing as $key => $endpoint) {
                         $params = ['kode_semester' => $semester, 'semester' => $semester];
                         if ($key === 'buku') {
-                            $params['jenis'] = 'buku_referensi';
+                            $params['type'] = 'buku_referensi';
                             $params['nip'] = $cleanNip;
                         }
                         $reqs[$key] = $pool->as($key)
@@ -491,7 +495,7 @@ class SIPPService extends AbstractApiClient
             $val = $list[$cleanNip];
             if (is_numeric($val)) return (int)$val;
             if (is_array($val)) {
-                foreach (['beban', 'total_beban', 'jumlah_beban', 'sks', 'bobot', 'total', 'jumlah'] as $field) {
+                foreach (['beban', 'total_beban', 'jumlah_beban', 'sks', 'bobot', 'total', 'count'] as $field) {
                     if (isset($val[$field]) && is_numeric($val[$field])) {
                         return (int)$val[$field];
                     }
@@ -516,7 +520,7 @@ class SIPPService extends AbstractApiClient
             if ($itemNip !== '' && $itemNip === $cleanNip) {
                 $matchFound = true;
                 $itemBeban = null;
-                foreach (['beban', 'total_beban', 'jumlah_beban', 'sks', 'bobot', 'total', 'jumlah'] as $field) {
+                foreach (['beban', 'total_beban', 'jumlah_beban', 'sks', 'bobot', 'total', 'count'] as $field) {
                     if (isset($item[$field]) && is_numeric($item[$field])) {
                         $itemBeban = (int)$item[$field];
                         break;

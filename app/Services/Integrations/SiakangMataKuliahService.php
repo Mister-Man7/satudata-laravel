@@ -6,7 +6,7 @@ use App\Services\DTO\ApiResponse;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 
-class SiakangMataKuliahService extends AbstractApiClient
+class SiakangMataKuliahService extends SiakangApiClient
 {
     protected function serviceName(): string
     {
@@ -17,8 +17,9 @@ class SiakangMataKuliahService extends AbstractApiClient
     {
         return [
             'base_url' => config('services.siakang.base_url'),
-            'auth_type' => 'token',
+            'auth_type' => 'bearer_login',
             'token' => config('services.siakang.token'),
+            'cf_clearance' => config('services.siakang.cf_clearance'),
             'connect_timeout' => 5,
             'timeout' => 15,
         ];

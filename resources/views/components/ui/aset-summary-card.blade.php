@@ -10,7 +10,8 @@
     $kondisiRusakBerat = $stats['kondisi_rusak_berat'] ?? 0;
     $kondisiRusakRingan = $stats['kondisi_rusak_ringan'] ?? 0;
     $totalRusak = $kondisiRusakRingan + $kondisiRusakBerat;
-    $totalKampus = $stats['total_kampus'] ?? 5;
+    $totalKampus = $stats['total_kampus'] ?? 0;
+    $totalTanpaKampus = (int) ($stats['total_tanpa_kampus'] ?? 0);
     $kampusBreakdown = $stats['kampus_breakdown'] ?? [];
 
     $pctBaik = $totalUnit > 0 ? round(($kondisiBaik / $totalUnit) * 100, 1) : 0;
@@ -48,7 +49,14 @@
                 <span class="inline-flex items-center gap-1.5 font-medium text-blue-700 bg-blue-50 px-2.5 py-0.5 rounded-full">
                     <i class="fa-solid fa-building text-[10px]"></i> {{ $totalKampus }} Kampus
                 </span>
-                <span class="text-gray-400">Inventaris Terdata</span>
+                @if($totalTanpaKampus > 0)
+                    <span class="font-medium text-amber-600"
+                          title="Aset pada data sumber belum memiliki id kampus maupun lokasi, sehingga belum masuk rincian kampus">
+                        {{ number_format($totalTanpaKampus, 0, ',', '.') }} belum berlokasi
+                    </span>
+                @else
+                    <span class="text-gray-400">Inventaris Terdata</span>
+                @endif
             </div>
         </div>
 

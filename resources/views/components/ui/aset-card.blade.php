@@ -156,7 +156,8 @@
 
 
 
-                    {{-- Metric KPI Display --}}
+                    {{-- Metric KPI Display: tampil bila total aset tersedia (field API atau agregasi tabel `asets`) --}}
+                    <template x-if="card.count">
                     <div class="mt-6 p-4 rounded-xl bg-slate-50/80 border border-slate-100 group-hover:bg-blue-50/30 group-hover:border-blue-100 transition-colors duration-200">
                         <span class="text-[10px] font-bold tracking-wider uppercase text-slate-400 block mb-1">
                             @if($level === 'kampus')
@@ -174,6 +175,7 @@
                                   x-text="formatCount(card.count).unit"></span>
                         </div>
                     </div>
+                    </template>
                 </div>
 
                 {{-- Card Footer --}}

@@ -5,7 +5,7 @@ namespace App\Services\Integrations;
 use App\Services\DTO\ApiResponse;
 use Illuminate\Support\Facades\Cache;
 
-class SiakangLulusanService extends AbstractApiClient
+class SiakangLulusanService extends SiakangApiClient
 {
     protected function serviceName(): string
     {
@@ -16,8 +16,9 @@ class SiakangLulusanService extends AbstractApiClient
     {
         return [
             'base_url' => config('services.siakang.base_url'),
-            'auth_type' => 'token',
+            'auth_type' => 'bearer_login',
             'token' => config('services.siakang.token'),
+            'cf_clearance' => config('services.siakang.cf_clearance'),
             'connect_timeout' => 5,
             'timeout' => 15,
         ];

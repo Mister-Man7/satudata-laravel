@@ -3,9 +3,11 @@
 namespace App\Http\Controllers\Academic;
 
 use App\Http\Controllers\Controller;
+use App\Services\Integrations\DosenSyncLauncher;
 use App\Services\Integrations\SiakangPenjadwalanService;
 use App\Services\Integrations\SimpegPegawaiService;
 use App\Services\Integrations\SIPPService;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
@@ -17,6 +19,7 @@ class DosenProfileController extends Controller
         public SimpegPegawaiService $pegawaiService,
         public SIPPService $sippService,
         public SiakangPenjadwalanService $penjadwalanService,
+        public DosenSyncLauncher $dosenLauncher,
     ) {}
 
     public function show(Request $request, string $nip): View
@@ -51,19 +54,38 @@ class DosenProfileController extends Controller
         $jadwalHariIni      = $this->buildJadwalHariIni($jadwalData);
         $statistikMengajar  = $this->buildStatistikMengajar($jadwalData);
 
+        // Tarik otomatis hanya bila data dosen ini memang masih kosong, tidak sedang
+        // dalam jeda, dan belum pernah dicoba (kosong) dalam 24 jam terakhir — supaya
+        // kunjungan halaman tidak memicu pemanggilan API berulang-ulang.
+        // Identitas dosen bisa berupa NIP 18 digit atau kode lain dari SIMPEG (mis. DLB);
+        // API SIPP & SIAKANG menerima nilainya apa adanya, jadi hanya identitas kosong
+        // yang tidak bisa ditarik.
+        $nipValid = $nip !== '';
+
+        $portofolioKosong = empty($publikasi10Tahun) && empty($penelitianList) && empty($pengabdianList);
+        $mengajarKosong   = ((int) ($statistikMengajar['total_mk'] ?? 0)) === 0;
+
+        $needsAutoSync = $nipValid
+            && $portofolioKosong
+            && $mengajarKosong
+            && !Cache::has("dosen_sync_cooldown_{$nip}_{$semester}")
+            && !Cache::has("dosen_sync_empty_{$nip}_{$semester}");
+
         $viewData = [
-            'title'             => 'Profil Dosen - ' . ($profile['nama'] ?? 'Untirta'),
-            'profile'           => $profile,
-            'publikasi10Tahun'  => $publikasi10Tahun,
-            'penelitianList'    => $penelitianList,
-            'pengabdianList'    => $pengabdianList,
-            'sintaIndexasi'     => $sintaIndexasi,
-            'jadwalHariIni'     => $jadwalHariIni,
-            'statistikMengajar' => $statistikMengajar,
-            'mataKuliahList'    => $jadwalData,
-            'nip'               => $nip,
-            'semester'          => $semester,
-            'semesterNama'      => $semesterNama,
+            'title'              => 'Profil Dosen - ' . ($profile['nama'] ?? 'Untirta'),
+            'profile'            => $profile,
+            'publikasi10Tahun'   => $publikasi10Tahun,
+            'penelitianList'     => $penelitianList,
+            'pengabdianList'     => $pengabdianList,
+            'sintaIndexasi'      => $sintaIndexasi,
+            'jadwalHariIni'      => $jadwalHariIni,
+            'statistikMengajar'  => $statistikMengajar,
+            'mataKuliahList'     => $jadwalData,
+            'nipValid'           => $nipValid,
+            'needsAutoSync' => $needsAutoSync,
+            'nip'                => $nip,
+            'semester'           => $semester,
+            'semesterNama'       => $semesterNama,
         ];
 
         Cache::put($cacheKey, $viewData, now()->addMinutes(30));
@@ -332,6 +354,11 @@ class DosenProfileController extends Controller
         return null;
     }
 
+    /**
+     * [Local-First] Ambil penjadwalan dosen (sumber SKS & jumlah MK) dari database SATUDATA,
+     * lalu jadwalkan revalidasi background ke API SIAKANG. Bila database belum punya data,
+     * baru mengambil langsung dari API.
+     */
     private function getJadwalData(string $nip, string $semester): array
     {
         $cacheKey = "dosen_jadwal_{$nip}_{$semester}";
@@ -340,22 +367,72 @@ class DosenProfileController extends Controller
             return $cached;
         }
 
+        // 1. Baca salinan lokal dari database.
+        try {
+            $dbItems = \App\Models\DosenSipp::where('nip', trim($nip))
+                ->where('semester', $semester)
+                ->value('penjadwalan');
+
+            if (empty($dbItems)) {
+                $dbItems = \App\Models\DosenSipp::where('nip', trim($nip))
+                    ->whereNotNull('penjadwalan')
+                    ->latest()
+                    ->value('penjadwalan');
+            }
+
+            if (is_array($dbItems) && !empty($dbItems)) {
+                Cache::put($cacheKey, $dbItems, now()->addHours(6));
+
+                // 2. Revalidasi background ke API SIAKANG (tidak menahan render halaman).
+                if (function_exists('defer')) {
+                    defer(fn () => $this->syncPenjadwalanFromApi($nip, $semester, $cacheKey));
+                }
+
+                return $dbItems;
+            }
+        } catch (\Throwable $e) {
+            Log::warning("Gagal membaca penjadwalan dosen {$nip} dari database: " . $e->getMessage());
+        }
+
+        // 3. Fallback sinkron ke API bila database belum memiliki data.
+        return $this->syncPenjadwalanFromApi($nip, $semester, $cacheKey);
+    }
+
+    /**
+     * Ambil penjadwalan satu dosen dari API SIAKANG dan simpan ke database SATUDATA.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    private function syncPenjadwalanFromApi(string $nip, string $semester, string $cacheKey): array
+    {
         try {
             $response = $this->penjadwalanService->getData([
                 'semester' => $semester,
                 'nip'      => $nip,
             ]);
+
             if ($response->success && !empty($response->data)) {
                 $payload = is_array($response->data) ? $response->data : [];
                 $items = $payload['data'] ?? (isset($payload[0]) ? $payload : []);
+
                 if (!empty($items)) {
+                    try {
+                        \App\Models\DosenSipp::updateOrCreate(
+                            ['nip' => trim($nip), 'semester' => $semester],
+                            ['penjadwalan' => array_values($items)]
+                        );
+                    } catch (\Throwable $e) {
+                        Log::warning("Gagal simpan penjadwalan dosen {$nip} ke database: " . $e->getMessage());
+                    }
+
                     Cache::put($cacheKey, $items, now()->addHours(6));
                     return $items;
                 }
             }
-        } catch (\Exception $e) {
-            Log::warning("Gagal ambil jadwal dosen {$nip}: " . $e->getMessage());
+        } catch (\Throwable $e) {
+            Log::warning("Gagal ambil jadwal dosen {$nip} dari API: " . $e->getMessage());
         }
+
         return [];
     }
 
@@ -464,14 +541,14 @@ class DosenProfileController extends Controller
             'nik' => $dosenData['nik'] ?? null,
             'kd_pegawai' => $dosenData['kd_pegawai'] ?? null,
             'nama' => $namaLengkap ?: '-',
-            'jabatan' => $dosenData['nama_jabatan'] ?? $dosenData['jabatan'] ?? 'Tenaga Pendidik',
-            'unit_kerja' => $dosenData['unitKerja'] ?? $dosenData['unit_kerja'] ?? 'Universitas Sultan Ageng Tirtayasa',
+            'jabatan' => $dosenData['nama_jabatan'] ?? $dosenData['jabatan'] ?? '-',
+            'unit_kerja' => $dosenData['unitKerja'] ?? $dosenData['unit_kerja'] ?? '-',
             'pangkat' => $dosenData['pangkat'] ?? $dosenData['nama_pangkat'] ?? '-',
             'email' => $dosenData['emailPegawai'] ?? $dosenData['email'] ?? '-',
             'noTlp' => $dosenData['noTlp'] ?? $dosenData['no_tlp'] ?? '-',
-            'statusKerja' => $dosenData['nama_stspegawai'] ?? $dosenData['statusKerja'] ?? 'Aktif',
-            'statusPegawai' => $dosenData['nama_stspeg'] ?? $dosenData['statusPegawai'] ?? 'PNS',
-            'levelPegawai' => $dosenData['nama_level_pegawai'] ?? $dosenData['levelPegawai'] ?? 'Dosen',
+            'statusKerja' => $dosenData['nama_stspegawai'] ?? $dosenData['statusKerja'] ?? '-',
+            'statusPegawai' => $dosenData['nama_stspeg'] ?? $dosenData['statusPegawai'] ?? '-',
+            'levelPegawai' => $dosenData['nama_level_pegawai'] ?? $dosenData['levelPegawai'] ?? '-',
         ];
     }
 
@@ -510,8 +587,8 @@ class DosenProfileController extends Controller
                             'kelas'   => $kelasList ?: '-',
                             'jam'     => ($waktu['jam_mulai'] ?? '-') . ' - ' . ($waktu['jam_selesai'] ?? '-'),
                             'ruang'   => $ruang,
-                            'mode'    => $jadwal['mode'] ?? 'OFFLINE',
-                            'status'  => $jadwal['status'] ?? 'Belum Terlaksana',
+                            'mode'    => $jadwal['mode'] ?? '-',
+                            'status'  => $jadwal['status'] ?? '-',
                         ];
                     }
                 }
@@ -531,7 +608,7 @@ class DosenProfileController extends Controller
             $sks = (int) ($mk['mata_kuliah']['sks'] ?? $mk['sks'] ?? 0);
             $totalSKS += $sks;
             $totalMK++;
-            $totalKelas += count($mk['jadwal'] ?? [1]);
+            $totalKelas += count($mk['jadwal'] ?? []);
         }
 
         return [
@@ -614,8 +691,8 @@ class DosenProfileController extends Controller
                 'journal'           => $detail['nama_jurnal'] ?? $detail['penerbit'] ?? $item['nama_jurnal'] ?? $item['journal'] ?? $item['sumber'] ?? '-',
                 'penerbit'          => $detail['penerbit'] ?? $item['penerbit'] ?? '-',
                 'tahun'             => $this->extractYear($item),
-                'tipe'              => $detail['jenis_publikasi'] ?? $item['jenis_portofolio'] ?? $item['tipe'] ?? 'Publikasi Ilmiah',
-                'status_verifikasi' => $item['status_verifikasi_label'] ?? $item['status_verifikasi'] ?? 'Terverifikasi',
+                'tipe'              => $detail['jenis_publikasi'] ?? $item['jenis_portofolio'] ?? $item['tipe'] ?? '-',
+                'status_verifikasi' => $item['status_verifikasi_label'] ?? $item['status_verifikasi'] ?? '-',
                 'doi'               => $links['doi'],
                 'doi_url'           => $links['doi_url'],
                 'tautan'            => $links['tautan'],
@@ -637,7 +714,7 @@ class DosenProfileController extends Controller
             $result[] = [
                 'judul'             => $item['judul_portofolio'] ?? $item['judul'] ?? $item['title'] ?? '-',
                 'tahun'             => $this->extractYear($item),
-                'tipe'              => $detail['jenis_publikasi'] ?? $item['jenis_portofolio'] ?? $item['detail']['kategori_kegiatan'] ?? $item['tipe'] ?? $item['jenis'] ?? '-',
+                'tipe'              => $detail['jenis_publikasi'] ?? $item['jenis_portofolio'] ?? $item['detail']['kategori_kegiatan'] ?? $item['tipe'] ?? $item['type'] ?? '-',
                 'status_verifikasi' => $item['status_verifikasi_label'] ?? $item['status_verifikasi'] ?? '-',
                 'lokasi'            => $detail['nama_jurnal'] ?? $detail['penerbit'] ?? $detail['lokasi'] ?? '-',
                 'doi'               => $links['doi'],
@@ -661,7 +738,7 @@ class DosenProfileController extends Controller
             $result[] = [
                 'judul'             => $item['judul_portofolio'] ?? $item['judul'] ?? $item['title'] ?? '-',
                 'tahun'             => $this->extractYear($item),
-                'tipe'              => $detail['jenis_publikasi'] ?? $item['jenis_portofolio'] ?? $item['detail']['kategori_kegiatan'] ?? $item['tipe'] ?? $item['jenis'] ?? '-',
+                'tipe'              => $detail['jenis_publikasi'] ?? $item['jenis_portofolio'] ?? $item['detail']['kategori_kegiatan'] ?? $item['tipe'] ?? $item['type'] ?? '-',
                 'status_verifikasi' => $item['status_verifikasi_label'] ?? $item['status_verifikasi'] ?? '-',
                 'lokasi'            => $detail['nama_jurnal'] ?? $detail['penerbit'] ?? $detail['lokasi'] ?? '-',
                 'doi'               => $links['doi'],
@@ -678,5 +755,113 @@ class DosenProfileController extends Controller
             'scopus' => ['dokumen' => '-', 'sitasi' => '-', 'h_index' => '-', 'i10_index' => '-', 'g_index' => '-'],
             'google_scholar' => ['dokumen' => '-', 'sitasi' => '-', 'h_index' => '-', 'i10_index' => '-', 'g_index' => '-'],
         ];
+    }
+
+    /**
+     * Mulai penarikan data dosen (portofolio SIPP + penjadwalan SIAKANG) dari tombol di
+     * halaman profil. Prosesnya berjalan terpisah; halaman memantau lewat syncStatus().
+     * Token API tetap di .env server, jadi pengguna tidak diminta mengisi apa pun.
+     */
+    public function syncData(Request $request, string $nip): JsonResponse
+    {
+        $nip = trim($nip);
+        $semester = $this->getActiveSemester($request->input('semester'));
+
+        // Identitas dosen tidak selalu 18 digit (mis. kode DLB dari SIMPEG); API SIPP dan
+        // SIAKANG menerima nilainya apa adanya, jadi yang dicegah hanya identitas kosong.
+        if ($nip === '') {
+            return response()->json([
+                'success' => false,
+                'status' => 'gagal',
+                'message' => 'Identitas dosen tidak tersedia.',
+            ], 422);
+        }
+
+        $key = 'dosen_sync_' . $nip . '_' . $semester;
+        $cooldownKey = 'dosen_sync_cooldown_' . $nip . '_' . $semester;
+        $status = Cache::get($key);
+
+        // Status "jalan" yang terlalu lama dianggap basi (mis. proses penarik mati),
+        // supaya tombol tetap bisa dipakai lagi.
+        $masihBerjalan = is_array($status)
+            && ($status['status'] ?? '') === 'jalan'
+            && isset($status['time'])
+            && now()->diffInMinutes(\Illuminate\Support\Carbon::parse($status['time'])) < 5;
+
+        if ($masihBerjalan) {
+            return response()->json([
+                'success' => true,
+                'status' => 'jalan',
+                'message' => 'Penarikan data sedang berjalan.',
+            ]);
+        }
+
+        if (!$this->dosenLauncher->isAvailable()) {
+            Cache::put($key, [
+                'status' => 'gagal',
+                'message' => 'Host aplikasi tidak memiliki Edge/Chrome.',
+                'time' => now()->toDateTimeString(),
+            ], now()->addMinutes(15));
+
+            return response()->json([
+                'success' => false,
+                'status' => 'gagal',
+                'message' => 'Penarikan otomatis tidak tersedia di server ini (butuh Edge/Chrome di host aplikasi).',
+            ], 503);
+        }
+
+        // Jeda 3 menit per dosen: mencegah peluncuran berulang akibat halaman dimuat ulang.
+        // Bila dosen ini sudah diketahui belum punya data (24 jam terakhir), tidak diulang lagi.
+        if (Cache::has($cooldownKey) || Cache::has('dosen_sync_empty_' . $nip . '_' . $semester)) {
+            return response()->json([
+                'success' => true,
+                'status' => 'diam',
+                'message' => 'Data dosen ini baru saja diperbarui.',
+            ]);
+        }
+
+        Cache::put($cooldownKey, true, now()->addMinutes(3));
+
+        Cache::put($key, [
+            'status' => 'jalan',
+            'message' => 'Menarik portofolio SIPP dan penjadwalan SIAKANG...',
+            'time' => now()->toDateTimeString(),
+        ], now()->addMinutes(15));
+
+        if (!$this->dosenLauncher->sync($nip, $semester, $key)) {
+            Cache::put($key, [
+                'status' => 'gagal',
+                'message' => 'Gagal menjalankan penarik.',
+                'time' => now()->toDateTimeString(),
+            ], now()->addMinutes(15));
+
+            return response()->json([
+                'success' => false,
+                'status' => 'gagal',
+                'message' => 'Gagal menjalankan penarik data.',
+            ], 500);
+        }
+
+        return response()->json([
+            'success' => true,
+            'status' => 'jalan',
+            'message' => 'Penarikan data dimulai.',
+        ], 202);
+    }
+
+    /**
+     * Status penarikan data dosen, dipantau oleh tombol di halaman profil.
+     */
+    public function syncStatus(Request $request, string $nip): JsonResponse
+    {
+        $semester = $this->getActiveSemester($request->input('semester'));
+        $status = Cache::get('dosen_sync_' . trim($nip) . '_' . $semester);
+
+        return response()->json([
+            'success' => true,
+            'status' => is_array($status) ? ($status['status'] ?? 'belum') : 'belum',
+            'has_data' => is_array($status) ? ($status['has_data'] ?? null) : null,
+            'message' => is_array($status) ? ($status['message'] ?? '') : '',
+        ]);
     }
 }

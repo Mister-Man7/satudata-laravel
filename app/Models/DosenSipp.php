@@ -20,6 +20,7 @@ class DosenSipp extends Model
         'publikasi',
         'penelitian',
         'pengabdian',
+        'penjadwalan',
         'payload',
     ];
 
@@ -37,6 +38,7 @@ class DosenSipp extends Model
             'publikasi'                => 'array',
             'penelitian'               => 'array',
             'pengabdian'               => 'array',
+            'penjadwalan'              => 'array',
             'payload'                  => 'array',
         ];
     }

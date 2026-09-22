@@ -37,6 +37,37 @@
             </a>
         </div>
 
+        <!-- Panel pembaruan: satu tombol saja, tanpa isian apa pun dari pengguna.
+             Penarikan dijalankan host aplikasi memakai Chromium lokal (satu-satunya klien
+             yang lolos Cloudflare dari server); token API tetap di .env server. -->
+        <div id="sync-sipp"
+             class="rounded-2xl border border-slate-100 bg-slate-50/70 px-4 py-3 flex flex-wrap items-center gap-3"
+             data-nip="{{ $profile['nip'] ?? '' }}"
+             data-nip-valid="{{ !empty($nipValid) ? '1' : '0' }}"
+             data-semester="{{ $semester }}"
+             data-url="{{ route('pegawai.profil-dosen.sync-data', ['nip' => $profile['nip'] ?? '-']) }}"
+             data-status-url="{{ route('pegawai.profil-dosen.sync-status', ['nip' => $profile['nip'] ?? '-']) }}"
+             data-auto="{{ !empty($needsAutoSync) ? '1' : '0' }}"
+             data-csrf="{{ csrf_token() }}">
+            <div class="flex items-center gap-2 text-sm text-slate-600">
+                <i class="fa-solid fa-database text-slate-400"></i>
+                <span>Tri Dharma, SKS, dan jadwal dibaca dari database SATUDATA.</span>
+            </div>
+            @if (empty($nipValid))
+                <span class="text-xs text-amber-600">
+                    <i class="fa-solid fa-circle-info"></i>
+                    Identitas dosen tidak tersedia, jadi data tidak dapat ditarik.
+                </span>
+            @endif
+            <div class="flex-1"></div>
+            <span id="sync-sipp-status" class="text-xs text-slate-500"></span>
+            <button type="button" id="sync-sipp-button" @disabled(empty($nipValid))
+                    class="inline-flex items-center gap-2 rounded-lg bg-cyan-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-cyan-700 transition-colors disabled:opacity-50 disabled:pointer-events-none">
+                <i class="fa-solid fa-rotate text-[11px]"></i>
+                <span>Tarik data terbaru</span>
+            </button>
+        </div>
+
         <!-- Top Row -->
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
             <div class="lg:col-span-1 rounded-2xl border border-gray-100 bg-white shadow-sm p-6 md:p-8">
@@ -625,5 +656,119 @@
             initTridarmaPagination('penelitian', 5, 'bg-rose-600 text-white');
             initTridarmaPagination('pengabdian', 5, 'bg-emerald-600 text-white');
         });
+    </script>
+
+    <script>
+        // Tombol "Tarik data terbaru": meminta server menjalankan penarik (Chromium lokal di
+        // host aplikasi) lalu memantau statusnya. Pengguna tidak mengisi token apa pun.
+        (function () {
+            const panel = document.getElementById('sync-sipp');
+            if (!panel) return;
+
+            const nip = (panel.dataset.nip || '').trim();
+            const semester = panel.dataset.semester || '';
+            const url = panel.dataset.url;
+            const statusUrl = panel.dataset.statusUrl;
+            const csrf = panel.dataset.csrf;
+            const tombol = document.getElementById('sync-sipp-button');
+            const status = document.getElementById('sync-sipp-status');
+
+            const writeStatus = (teks, kelas) => { status.textContent = teks || ''; status.className = 'text-xs ' + (kelas || 'text-slate-500'); };
+            const lockButton = (mati) => { tombol.disabled = mati; tombol.classList.toggle('opacity-60', mati); };
+
+            // Identitas dosen kosong: penjelasannya sudah dirender server.
+            if (panel.dataset.nipValid !== '1') {
+                return;
+            }
+
+            async function checkStatus() {
+                const respons = await fetch(statusUrl + '?semester=' + encodeURIComponent(semester), { headers: { accept: 'application/json' } });
+                return respons.ok ? respons.json() : { status: 'belum', message: '' };
+            }
+
+            async function pantau(batasDetik) {
+                const mulai = Date.now();
+
+                while (Date.now() - mulai < batasDetik * 1000) {
+                    await new Promise((selesai) => setTimeout(selesai, 3000));
+
+                    let hasil;
+                    try { hasil = await checkStatus(); } catch (e) { hasil = { status: 'belum', message: '' }; }
+
+                    if (hasil.status === 'selesai') {
+                        if (hasil.has_data === false) {
+                            writeStatus('Belum ada data di SIPP/SIAKANG untuk dosen ini.', 'text-slate-500');
+                            lockButton(false);
+                            return;
+                        }
+
+                        writeStatus('Data berhasil diambil. Memuat ulang...', 'text-emerald-600');
+                        window.location.href = window.location.pathname + '?refresh=1';
+                        return;
+                    }
+
+                    if (hasil.status === 'gagal') {
+                        writeStatus(hasil.message || 'Penarikan data gagal.', 'text-rose-600');
+                        lockButton(false);
+                        return;
+                    }
+
+                    writeStatus('Sedang menarik data dari SIPP dan SIAKANG...', 'text-slate-500');
+                }
+
+                writeStatus('Masih berjalan. Muat ulang halaman sebentar lagi untuk melihat hasilnya.', 'text-amber-600');
+                lockButton(false);
+            }
+
+            async function startSync(otomatis) {
+                lockButton(true);
+                writeStatus(otomatis ? 'Mengambil data terbaru...' : 'Meminta penarikan data...', 'text-slate-500');
+
+                try {
+                    const respons = await fetch(url, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': csrf },
+                        body: JSON.stringify({ semester: semester }),
+                    });
+
+                    const hasil = await respons.json().catch(() => ({}));
+
+                    if (hasil.status === 'diam') {
+                        writeStatus('Data dosen ini baru saja diperbarui.', 'text-slate-500');
+                        lockButton(false);
+                        return;
+                    }
+
+                    if (!respons.ok && respons.status !== 202) {
+                        writeStatus(
+                            otomatis
+                                ? 'Data belum dapat diambil otomatis. Tekan "Tarik data terbaru".'
+                                : (hasil.message || 'Permintaan penarikan gagal (HTTP ' + respons.status + ').'),
+                            otomatis ? 'text-slate-500' : 'text-rose-600'
+                        );
+                        lockButton(false);
+                        return;
+                    }
+
+                    writeStatus(otomatis ? 'Mengambil data terbaru...' : 'Penarikan dimulai...', 'text-slate-500');
+                    await pantau(180);
+                } catch (e) {
+                    writeStatus(
+                        otomatis ? 'Data belum dapat diambil otomatis.' : 'Gagal menghubungi server: ' + e.message,
+                        otomatis ? 'text-slate-500' : 'text-rose-600'
+                    );
+                    lockButton(false);
+                }
+            }
+
+            tombol.addEventListener('click', function () {
+                startSync(false);
+            });
+
+            // Otomatis saat halaman dibuka bila data dosen ini masih kosong.
+            if (panel.dataset.otomatis === '1') {
+                startSync(true);
+            }
+        })();
     </script>
 </x-layout>

@@ -5,10 +5,16 @@
 
     @php
         $items = collect($bmnList)->values();
+        $kondisiMap = config('aset.kondisi', []);
+        $kondisiRef = fn (string $kunci) => $kondisiMap[$kunci] ?? ['kode' => null, 'label' => null];
+        $hitungKondisi = fn (string $kunci) => $items->filter(
+            fn ($i) => (int) ($i['kondisi'] ?? 0) === (int) $kondisiRef($kunci)['kode']
+                || strtolower(trim($i['kondisi_text'] ?? '')) === strtolower((string) $kondisiRef($kunci)['label'])
+        )->count();
         $totalItems = $items->count();
-        $totalBaik = $items->filter(fn($i) => ($i['kondisi'] ?? null) == 1 || strtolower($i['kondisi_text'] ?? '') === 'baik')->count();
-        $totalRusakRingan = $items->filter(fn($i) => ($i['kondisi'] ?? null) == 2 || strtolower($i['kondisi_text'] ?? '') === 'rusak ringan')->count();
-        $totalRusakBerat = $items->filter(fn($i) => ($i['kondisi'] ?? null) == 3 || strtolower($i['kondisi_text'] ?? '') === 'rusak berat')->count();
+        $totalBaik = $hitungKondisi('baik');
+        $totalRusakRingan = $hitungKondisi('rusak_ringan');
+        $totalRusakBerat = $hitungKondisi('rusak_berat');
         $totalNilaiRuangan = $items->sum(fn($i) => (float)($i['nilai_perolehan'] ?? 0));
         $pctBaik = $totalItems > 0 ? round(($totalBaik / $totalItems) * 100, 1) : 0;
     @endphp
@@ -21,15 +27,24 @@
             pageSize: 10,
             currentPage: 1,
             items: @js($items),
+            kondisiMap: @js($kondisiMap),
+
+            // Kunci kondisi (baik/rusak_ringan/rusak_berat) dari kode atau teksnya.
+            kondisiKunci(item) {
+                const k = String(item.kondisi ?? '');
+                const kt = (item.kondisi_text ?? '').toLowerCase().trim();
+                const cocok = Object.entries(this.kondisiMap).find(([, v]) =>
+                    String(v.kode) === k || (kt !== '' && kt === String(v.label).toLowerCase()));
+                return cocok ? cocok[0] : null;
+            },
 
             matches(item) {
                 // Filter Kondisi
                 if (this.filterKondisi !== 'all') {
                     const k = String(item.kondisi ?? '');
                     const kt = (item.kondisi_text ?? '').toLowerCase();
-                    if (this.filterKondisi === '1' && k !== '1' && !kt.includes('baik')) return false;
-                    if (this.filterKondisi === '2' && k !== '2' && !kt.includes('ringan')) return false;
-                    if (this.filterKondisi === '3' && k !== '3' && !kt.includes('berat')) return false;
+                    const target = Object.values(this.kondisiMap).find(v => String(v.kode) === this.filterKondisi);
+                    if (target && k !== String(target.kode) && !kt.includes(String(target.label).toLowerCase())) return false;
                 }
 
                 // Filter Search
@@ -270,9 +285,9 @@
                             @change="currentPage = 1"
                             class="py-2 pl-3 pr-8 bg-white border border-gray-200 rounded-xl text-xs font-semibold text-gray-700 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 cursor-pointer">
                         <option value="all">Semua Kondisi</option>
-                        <option value="1">Kondisi Baik</option>
-                        <option value="2">Rusak Ringan</option>
-                        <option value="3">Rusak Berat</option>
+                        @foreach ($kondisiMap as $entriKondisi)
+                            <option value="{{ $entriKondisi['kode'] }}">{{ $entriKondisi['label'] }}</option>
+                        @endforeach
                     </select>
 
                     {{-- Sort By --}}
@@ -359,22 +374,19 @@
 
                                 {{-- Kondisi --}}
                                 <td class="py-3.5 px-4 text-center">
-                                    <template x-if="item.kondisi === 1 || (item.kondisi_text && item.kondisi_text.toLowerCase().includes('baik'))">
-                                        <span class="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 text-xs font-semibold text-emerald-700">
-                                            Baik
-                                        </span>
+                                    <template x-if="kondisiKunci(item) === 'baik'">
+                                        <span class="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 text-xs font-semibold text-emerald-700"
+                                              x-text="kondisiMap.baik.label"></span>
                                     </template>
-                                    <template x-if="item.kondisi === 2 || (item.kondisi_text && item.kondisi_text.toLowerCase().includes('ringan'))">
-                                        <span class="inline-flex items-center gap-1.5 rounded-full border border-amber-200 bg-amber-50 px-2.5 py-0.5 text-xs font-semibold text-amber-700">
-                                            Rusak Ringan
-                                        </span>
+                                    <template x-if="kondisiKunci(item) === 'rusak_ringan'">
+                                        <span class="inline-flex items-center gap-1.5 rounded-full border border-amber-200 bg-amber-50 px-2.5 py-0.5 text-xs font-semibold text-amber-700"
+                                              x-text="kondisiMap.rusak_ringan.label"></span>
                                     </template>
-                                    <template x-if="item.kondisi === 3 || (item.kondisi_text && item.kondisi_text.toLowerCase().includes('berat'))">
-                                        <span class="inline-flex items-center gap-1.5 rounded-full border border-rose-200 bg-rose-50 px-2.5 py-0.5 text-xs font-semibold text-rose-700">
-                                            Rusak Berat
-                                        </span>
+                                    <template x-if="kondisiKunci(item) === 'rusak_berat'">
+                                        <span class="inline-flex items-center gap-1.5 rounded-full border border-rose-200 bg-rose-50 px-2.5 py-0.5 text-xs font-semibold text-rose-700"
+                                              x-text="kondisiMap.rusak_berat.label"></span>
                                     </template>
-                                    <template x-if="![1, 2, 3].includes(item.kondisi) && !['baik', 'rusak ringan', 'rusak berat'].some(k => (item.kondisi_text || '').toLowerCase().includes(k))">
+                                    <template x-if="kondisiKunci(item) === null">
                                         <span class="text-xs text-gray-500 font-medium" x-text="item.kondisi_text || '-'"></span>
                                     </template>
                                 </td>

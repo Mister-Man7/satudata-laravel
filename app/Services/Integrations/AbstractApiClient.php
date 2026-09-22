@@ -138,6 +138,59 @@ abstract class AbstractApiClient
     }
 
     /**
+     * User-Agent default bila tidak diatur lewat .env.
+     */
+    protected const USER_AGENT_BROWSER = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36';
+
+    /**
+     * Prefix config service di `config/services.php`, mis. 'siakang.penjadwalan' -> 'siakang'.
+     */
+    protected function configPrefix(): string
+    {
+        return explode('.', $this->serviceName())[0];
+    }
+
+    /**
+     * User-Agent default untuk service ini.
+     */
+    protected function userAgentDefault(): string
+    {
+        return self::USER_AGENT_BROWSER;
+    }
+
+    /**
+     * User-Agent yang dipakai request.
+     *
+     * Cookie cf_clearance Cloudflare terikat pada pasangan IP + User-Agent, sehingga
+     * UA harus sama persis dengan klien (browser/Postman) yang lolos challenge.
+     * Atur lewat SIPP_API_USER_AGENT / SIAKANG_API_USER_AGENT di .env.
+     */
+    protected function userAgent(): string
+    {
+        return (string) (config("services.{$this->configPrefix()}.user_agent") ?: $this->userAgentDefault());
+    }
+
+    /**
+     * Nilai header Cookie untuk melewati Cloudflare.
+     *
+     * `cookie` (mis. SIPP_API_COOKIE / SIAKANG_API_COOKIE) dipakai bila ingin menempel
+     * seluruh Cookie header dari browser (cf_clearance + __cf_bm); bila kosong,
+     * dipakai cf_clearance saja.
+     */
+    protected function cloudflareCookie(array $config): ?string
+    {
+        $cookie = (string) ($config['cookie'] ?? config("services.{$this->configPrefix()}.cookie") ?? '');
+
+        if ($cookie !== '') {
+            return $cookie;
+        }
+
+        $clearance = (string) ($config['cf_clearance'] ?? '');
+
+        return $clearance !== '' ? 'cf_clearance=' . $clearance : null;
+    }
+
+    /**
      * Bangun PendingRequest dengan auth, headers, dll.
      */
     protected function buildRequest(array $config): PendingRequest
@@ -145,8 +198,14 @@ abstract class AbstractApiClient
         $request = Http::acceptJson()
             ->withHeaders([
                 'Accept-Language' => 'id-ID,id;q=0.9,en-US;q=0.8,en;q=0.7',
-                'User-Agent' => 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36',
+                'User-Agent' => $this->userAgent(),
             ]);
+
+        // Cookie Cloudflare untuk API yang dilindungi challenge.
+        $cookie = $this->cloudflareCookie($config);
+        if ($cookie !== null) {
+            $request = $request->withHeaders(['Cookie' => $cookie]);
+        }
 
         // Terapkan auth berdasarkan tipe
         $authType = $config['auth_type'] ?? null;

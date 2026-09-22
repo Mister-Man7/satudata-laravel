@@ -30,6 +30,14 @@ Route::prefix('aset')->name('aset.')->group(function () {
     Route::get('/kampus/{kampusId}/gedung', [AsetController::class, 'gedung'])->name('gedung');
     Route::get('/gedung/{gedungId}/ruangan', [AsetController::class, 'ruangan'])->name('ruangan');
     Route::get('/ruangan/{ruanganId}/bmn', [AsetController::class, 'bmn'])->name('bmn');
+
+    // Penyegaran data aset dari tombol di halaman aset. Peluncuran proses penarik dibatasi
+    // throttle seperti pada halaman profil dosen, sedangkan statusnya dipantau terpisah.
+    Route::post('/sync-data', [AsetController::class, 'syncData'])
+        ->middleware('throttle:10,1')
+        ->name('sync-data');
+    Route::get('/sync-status', [AsetController::class, 'syncStatus'])
+        ->name('sync-status');
 });
 
 Route::get('/pegawai', [PegawaiController::class, 'index'])
@@ -40,6 +48,11 @@ Route::get('/pegawai/profil-dosen/{nip}', [\App\Http\Controllers\Academic\DosenP
     ->name('pegawai.profil-dosen.show');
 Route::get('/pegawai/profil-dosen/{nip}/sipp-metrics', [\App\Http\Controllers\Academic\DosenProfileController::class, 'sippMetrics'])
     ->name('pegawai.profil-dosen.sipp-metrics');
+Route::post('/pegawai/profil-dosen/{nip}/sync-data', [\App\Http\Controllers\Academic\DosenProfileController::class, 'syncData'])
+    ->middleware('throttle:10,1')
+    ->name('pegawai.profil-dosen.sync-data');
+Route::get('/pegawai/profil-dosen/{nip}/sync-status', [\App\Http\Controllers\Academic\DosenProfileController::class, 'syncStatus'])
+    ->name('pegawai.profil-dosen.sync-status');
 
 Route::get('/infrastruktur', function () {
     return view('Integration.infrastruktur', ['title' => 'Infrastruktur']);

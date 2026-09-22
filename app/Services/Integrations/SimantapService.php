@@ -233,6 +233,78 @@ class SimantapService extends AbstractApiClient
     }
 
     /**
+     * Ringkasan kampus langsung dari tabel `asets`: id kampus asli (kolom
+     * id_kampus) beserta nama yang diambil dari segmen pertama `lokasi_lengkap`,
+     * jadi tidak memakai daftar kampus tetap di kode.
+     *
+     * @return array<string, array{id: string, nama: string, total: int}>
+     */
+    protected function kampusDariData(): array
+    {
+        return Cache::remember('simantap_kampus_dari_data_v1', now()->addHours(6), function () {
+            $rows = \Illuminate\Support\Facades\DB::table('asets')
+                ->select(
+                    'id_kampus',
+                    \Illuminate\Support\Facades\DB::raw('COUNT(*) as total'),
+                    \Illuminate\Support\Facades\DB::raw("MIN(CASE WHEN lokasi_lengkap IS NOT NULL AND lokasi_lengkap <> '-' THEN lokasi_lengkap END) as contoh_lokasi")
+                )
+                ->whereNotNull('id_kampus')
+                ->whereNotIn('id_kampus', ['', 'NULL'])
+                ->groupBy('id_kampus')
+                ->get();
+
+            $hasil = [];
+
+            foreach ($rows as $row) {
+                $segmen = $this->segmenLokasi((string) ($row->contoh_lokasi ?? ''));
+                $nama = $segmen[0] ?? '';
+
+                // Lokasi yang tidak terbaca dilewati, bukan diberi nama karangan.
+                if ($nama === '') {
+                    continue;
+                }
+
+                $hasil[(string) $row->id_kampus] = [
+                    'id' => (string) $row->id_kampus,
+                    'nama' => $nama,
+                    'total' => (int) $row->total,
+                ];
+            }
+
+            return $hasil;
+        });
+    }
+
+    /**
+     * Pecah `lokasi_lengkap` menjadi segmen berurutan:
+     * kampus, gedung, lantai, ruangan. Segmen kosong atau '-' tetap dipertahankan
+     * posisinya agar penomoran segmen tidak bergeser.
+     *
+     * @return array<int, string>
+     */
+    protected function segmenLokasi(string $lokasi): array
+    {
+        $lokasi = trim($lokasi);
+
+        if ($lokasi === '' || $lokasi === '-') {
+            return [];
+        }
+
+        return array_map('trim', explode(' - ', $lokasi));
+    }
+
+    /**
+     * Id kampus bergaya URL lama, mis. "Kampus Sindangsari" -> KAMPUS-SINDANGSARI.
+     * Dipakai agar tautan lama tetap dapat dibuka.
+     */
+    protected function slugKampus(string $namaKampus): string
+    {
+        $nama = preg_replace('/^kampus\s+/i', '', trim($namaKampus));
+
+        return 'KAMPUS-' . strtoupper(preg_replace('/[^a-zA-Z0-9]+/', '-', $nama));
+    }
+
+    /**
      * Data fallback dinamis dari 97.715 data BMN riil di database (`App\Models\Aset`).
      * Dikelompokkan per Kampus, Gedung, dan Ruangan secara otomatis.
      */
@@ -243,41 +315,15 @@ class SimantapService extends AbstractApiClient
         // 1. Kampus list (kampus, kampus/by-satker) - Agregasi dinamis per Kampus dari 97.715 data Aset
         if ($ep === 'kampus' || str_starts_with($ep, 'kampus/by-satker')) {
             try {
-                return Cache::remember('simantap_kampus_summary_v3', now()->addHours(6), function () {
-                    $kampusMap = [
-                        'KAMPUS-SINDANGSARI' => ['nama' => 'Kampus Sindangsari', 'keyword' => 'Sindangsari', 'count' => 0],
-                        'KAMPUS-PAKUPATAN' => ['nama' => 'Kampus Pakupatan', 'keyword' => 'Pakupatan', 'count' => 0],
-                        'KAMPUS-KEPANDEAN' => ['nama' => 'Kampus Kepandean', 'keyword' => 'Kepandean', 'count' => 0],
-                        'KAMPUS-CILEGON' => ['nama' => 'Kampus Cilegon', 'keyword' => 'Cilegon', 'count' => 0],
-                        'KAMPUS-CIWARU' => ['nama' => 'Kampus Ciwaru', 'keyword' => 'Ciwaru', 'count' => 0],
-                    ];
-
-                    $totalAll = \Illuminate\Support\Facades\DB::table('asets')->count();
-                    $sumOther = 0;
-
-                    $distinct = $this->getDistinctLocations();
-                    foreach ($distinct as $row) {
-                        $lok = is_array($row) ? ($row['lokasi_lengkap'] ?? '') : ($row->lokasi_lengkap ?? '');
-                        $cnt = (int)(is_array($row) ? ($row['total'] ?? 0) : ($row->total ?? 0));
-                        foreach ($kampusMap as $kId => &$kData) {
-                            if ($kId === 'KAMPUS-SINDANGSARI') continue;
-                            if (stripos($lok, $kData['keyword']) !== false) {
-                                $kData['count'] += $cnt;
-                                $sumOther += $cnt;
-                                break;
-                            }
-                        }
-                        unset($kData);
-                    }
-
-                    $kampusMap['KAMPUS-SINDANGSARI']['count'] = max(0, $totalAll - $sumOther);
-
+                return Cache::remember('simantap_kampus_summary_v4', now()->addHours(6), function () {
+                    // Daftar kampus beserta jumlah asetnya diambil dari kolom
+                    // id_kampus pada tabel `asets`, tanpa daftar kampus tetap.
                     $kampusList = [];
-                    foreach ($kampusMap as $kId => $kData) {
+                    foreach ($this->kampusDariData() as $kampus) {
                         $kampusList[] = [
-                            'id_kampus' => $kId,
-                            'nama_kampus' => $kData['nama'],
-                            'total_aset' => $kData['count'],
+                            'id_kampus' => $kampus['id'],
+                            'nama_kampus' => $kampus['nama'],
+                            'total_aset' => $kampus['total'],
                             'updated_at' => now()->toDateTimeString(),
                         ];
                     }
@@ -297,16 +343,24 @@ class SimantapService extends AbstractApiClient
         // 2. Detail Kampus (kampus/{id}) -> List Gedung dinamis pada Kampus tersebut
         if (str_starts_with($ep, 'kampus/')) {
             $parts = explode('/', $ep);
-            $kampusId = strtoupper($parts[1] ?? 'KAMPUS-SINDANGSARI');
-
-            $kw = 'Sindangsari';
-            $namaK = 'Kampus Sindangsari';
-            if (str_contains($kampusId, 'PAKUPATAN')) { $kw = 'Pakupatan'; $namaK = 'Kampus Pakupatan'; }
-            elseif (str_contains($kampusId, 'KEPANDEAN')) { $kw = 'Kepandean'; $namaK = 'Kampus Kepandean'; }
-            elseif (str_contains($kampusId, 'CILEGON')) { $kw = 'Cilegon'; $namaK = 'Kampus Cilegon'; }
-            elseif (str_contains($kampusId, 'CIWARU')) { $kw = 'Ciwaru'; $namaK = 'Kampus Ciwaru'; }
+            $kampusId = $parts[1] ?? '';
 
             try {
+                $kampus = $this->kampusDariData();
+                $target = $kampus[$kampusId] ?? null;
+
+                // Tautan lama memakai id berbasis slug nama kampus.
+                if ($target === null) {
+                    foreach ($kampus as $kandidat) {
+                        if ($this->slugKampus($kandidat['nama']) === strtoupper((string) $kampusId)) {
+                            $target = $kandidat;
+                            break;
+                        }
+                    }
+                }
+
+                $namaK = $target['nama'] ?? '';
+
                 $distinct = $this->getDistinctLocations();
                 $gedungCounts = [];
 
@@ -314,35 +368,24 @@ class SimantapService extends AbstractApiClient
                     $lok = is_array($r) ? ($r['lokasi_lengkap'] ?? '') : ($r->lokasi_lengkap ?? '');
                     $total = (int)(is_array($r) ? ($r['total'] ?? 0) : ($r->total ?? 0));
 
-                    $matched = false;
-                    if (stripos($lok, $kw) !== false) {
-                        $matched = true;
-                    } elseif ($kampusId === 'KAMPUS-SINDANGSARI') {
-                        $isOther = false;
-                        foreach (['Pakupatan', 'Kepandean', 'Cilegon', 'Ciwaru'] as $otherKw) {
-                            if (stripos($lok, $otherKw) !== false) {
-                                $isOther = true;
-                                break;
-                            }
-                        }
-                        if (!$isOther) {
-                            $matched = true;
-                        }
+                    $segmen = $this->segmenLokasi((string) $lok);
+
+                    // Kampus dicocokkan dari segmen pertama lokasi, bukan kata kunci.
+                    if (empty($segmen) || $namaK === '' || strcasecmp($segmen[0], $namaK) !== 0) {
+                        continue;
                     }
 
-                    if ($matched) {
-                        $lParts = array_map('trim', explode('-', $lok));
-                        $gName = $lParts[1] ?? 'Gedung Utama';
-                        if (empty($gName) || $gName === '-') {
-                            $gName = 'Gedung Rektorat / Utama';
-                        }
-                        $gedungCounts[$gName] = ($gedungCounts[$gName] ?? 0) + $total;
+                    $gName = $segmen[1] ?? '';
+                    if ($gName === '' || $gName === '-') {
+                        $gName = 'Gedung tidak diketahui';
                     }
+
+                    $gedungCounts[$gName] = ($gedungCounts[$gName] ?? 0) + $total;
                 }
 
                 $gedungList = [];
                 foreach ($gedungCounts as $gName => $count) {
-                    $gSlug = 'GEDUNG-' . strtoupper(preg_replace('/[^a-zA-Z0-9]+/', '-', $gName));
+                    $gSlug = 'GEDUNG-' . strtoupper(preg_replace('/[^a-zA-Z0-9]+/', '-', preg_replace('/^gedung\s+/i', '', $gName)));
                     $gedungList[] = [
                         'id_gedung' => $gSlug,
                         'nama_gedung' => $gName,
@@ -368,13 +411,21 @@ class SimantapService extends AbstractApiClient
         if ($ep === 'gedung' || str_starts_with($ep, 'gedung/by-kampus')) {
             try {
                 $parts = explode('/', $ep);
-                $kampusId = strtoupper(end($parts));
+                $kampusId = (string) end($parts);
 
-                $kw = 'Sindangsari';
-                if (str_contains($kampusId, 'PAKUPATAN')) $kw = 'Pakupatan';
-                elseif (str_contains($kampusId, 'KEPANDEAN')) $kw = 'Kepandean';
-                elseif (str_contains($kampusId, 'CILEGON')) $kw = 'Cilegon';
-                elseif (str_contains($kampusId, 'CIWARU')) $kw = 'Ciwaru';
+                // Kampus boleh kosong: endpoint 'gedung' memang menampilkan seluruh gedung.
+                $namaK = '';
+                $kampus = $this->kampusDariData();
+                if (isset($kampus[$kampusId])) {
+                    $namaK = $kampus[$kampusId]['nama'];
+                } else {
+                    foreach ($kampus as $kandidat) {
+                        if ($this->slugKampus($kandidat['nama']) === strtoupper($kampusId)) {
+                            $namaK = $kandidat['nama'];
+                            break;
+                        }
+                    }
+                }
 
                 $distinct = $this->getDistinctLocations();
                 $gedungCounts = [];
@@ -383,39 +434,26 @@ class SimantapService extends AbstractApiClient
                     $lok = is_array($r) ? ($r['lokasi_lengkap'] ?? '') : ($r->lokasi_lengkap ?? '');
                     $total = (int)(is_array($r) ? ($r['total'] ?? 0) : ($r->total ?? 0));
 
-                    $matched = false;
-                    if (str_contains($kampusId, 'KAMPUS-')) {
-                        if (stripos($lok, $kw) !== false) {
-                            $matched = true;
-                        } elseif (str_contains($kampusId, 'SINDANGSARI')) {
-                            $isOther = false;
-                            foreach (['Pakupatan', 'Kepandean', 'Cilegon', 'Ciwaru'] as $otherKw) {
-                                if (stripos($lok, $otherKw) !== false) {
-                                    $isOther = true;
-                                    break;
-                                }
-                            }
-                            if (!$isOther) {
-                                $matched = true;
-                            }
-                        }
-                    } else {
-                        $matched = true;
+                    $segmen = $this->segmenLokasi((string) $lok);
+                    if (empty($segmen)) {
+                        continue;
                     }
 
-                    if ($matched) {
-                        $lParts = array_map('trim', explode('-', $lok));
-                        $gName = $lParts[1] ?? 'Gedung Utama';
-                        if (empty($gName) || $gName === '-') {
-                            $gName = 'Gedung Rektorat / Utama';
-                        }
-                        $gedungCounts[$gName] = ($gedungCounts[$gName] ?? 0) + $total;
+                    if ($namaK !== '' && strcasecmp($segmen[0], $namaK) !== 0) {
+                        continue;
                     }
+
+                    $gName = $segmen[1] ?? '';
+                    if ($gName === '' || $gName === '-') {
+                        $gName = 'Gedung tidak diketahui';
+                    }
+
+                    $gedungCounts[$gName] = ($gedungCounts[$gName] ?? 0) + $total;
                 }
 
                 $gedungList = [];
                 foreach ($gedungCounts as $gName => $count) {
-                    $gSlug = 'GEDUNG-' . strtoupper(preg_replace('/[^a-zA-Z0-9]+/', '-', $gName));
+                    $gSlug = 'GEDUNG-' . strtoupper(preg_replace('/[^a-zA-Z0-9]+/', '-', preg_replace('/^gedung\s+/i', '', $gName)));
                     $gedungList[] = [
                         'id_gedung' => $gSlug,
                         'nama_gedung' => $gName,
@@ -441,7 +479,7 @@ class SimantapService extends AbstractApiClient
             try {
                 $parts = explode('/', $ep);
                 $gedungSlug = end($parts);
-                $targetGedung = trim(str_replace(['GEDUNG-', '-'], [' ', ' '], $gedungSlug));
+                $targetGedung = trim(preg_replace('/^GEDUNG\s+/i', '', trim(str_replace('-', ' ', preg_replace('/^GEDUNG-/i', '', (string) $gedungSlug)))));
 
                 $distinct = $this->getDistinctLocations();
                 $ruanganCounts = [];
@@ -450,14 +488,29 @@ class SimantapService extends AbstractApiClient
                     $lok = is_array($r) ? ($r['lokasi_lengkap'] ?? '') : ($r->lokasi_lengkap ?? '');
                     $total = (int)(is_array($r) ? ($r['total'] ?? 0) : ($r->total ?? 0));
 
-                    if (empty($targetGedung) || $targetGedung === 'RUANGAN' || stripos($lok, $targetGedung) !== false) {
-                        $lParts = array_map('trim', explode('-', $lok));
-                        $rName = end($lParts);
-                        if (empty($rName) || $rName === '-') {
-                            $rName = 'Ruang Operasional';
-                        }
-                        $ruanganCounts[$rName] = ($ruanganCounts[$rName] ?? 0) + $total;
+                    $segmen = $this->segmenLokasi((string) $lok);
+                    if (empty($segmen)) {
+                        continue;
                     }
+
+                    // Gedung dicocokkan dari segmen kedua lokasi, tanpa awalan "Gedung"
+                    // agar cocok dengan id bergaya GEDUNG-<nama>.
+                    $namaGedung = preg_replace('/^gedung\s+/i', '', (string) ($segmen[1] ?? ''));
+                    if ($targetGedung !== '' && strcasecmp($namaGedung, $targetGedung) !== 0) {
+                        continue;
+                    }
+
+                    $rName = '';
+                    foreach ($segmen as $bagian) {
+                        if (stripos($bagian, 'ruang') === 0) {
+                            $rName = $bagian;
+                        }
+                    }
+                    if ($rName === '') {
+                        $rName = 'Ruang tidak diketahui';
+                    }
+
+                    $ruanganCounts[$rName] = ($ruanganCounts[$rName] ?? 0) + $total;
                 }
 
                 $ruanganList = [];

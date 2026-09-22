@@ -17,13 +17,28 @@ class PegawaiController extends Controller
     {
     }
 
-    private const STATUS_KERJA = [1, 2, 3, 4, 5, 6, 7, 8, 19, 20];
+    /**
+     * Nilai id filter yang diterima API SIMPEG, sumbernya config/pegawai.php.
+     */
+    private function statusKerjaIds(): array
+    {
+        return config('pegawai.filter.status_kerja', []);
+    }
 
-    private const STATUS_PEGAWAI = [1, 2, 3, 4, 5, 6, 7, 19, 20];
+    private function statusPegawaiIds(): array
+    {
+        return config('pegawai.filter.status_pegawai', []);
+    }
 
-    private const LEVEL_PEGAWAI = [2, 3, 7, 13];
+    private function levelPegawaiIds(): array
+    {
+        return config('pegawai.filter.level_pegawai', []);
+    }
 
-    private const JABATAN = [44];
+    private function jabatanIds(): array
+    {
+        return config('pegawai.filter.jabatan', []);
+    }
 
     public function index(Request $request): View
     {
@@ -45,7 +60,7 @@ class PegawaiController extends Controller
             return stripos($j, 'Profesor') !== false || stripos($j, 'Guru Besar') !== false || stripos($n, 'Prof.') !== false || stripos($g, 'Prof') !== false;
         })->count();
 
-        $countsLevel = $allPegawai->groupBy(fn($p) => trim($p['nama_level_pegawai'] ?? $p['levelPegawai'] ?? 'Lainnya'))->map->count();
+        $countsLevel = $allPegawai->groupBy(fn($p) => trim($p['nama_level_pegawai'] ?? $p['levelPegawai'] ?? 'Tidak Diketahui'))->map->count();
 
         $daftarStatistik = [
             [
@@ -68,7 +83,7 @@ class PegawaiController extends Controller
             ],
             [
                 'title' => 'Dosen (Tenaga Pengajar)',
-                'value' => ($countsLevel->get('Dosen', 0)) + ($countsLevel->get('Dosen DT', 0)) + ($countsLevel->get('Dosen Luar Biasa', 0)) + ($countsLevel->get('Dosen LB', 0)),
+                'value' => $this->hitungKelompokLevel($countsLevel, 'dosen'),
                 'href' => null,
                 'iconClass' => 'fa-solid fa-chalkboard-user text-blue-600',
                 'badgeText' => 'Tenaga Pengajar',
@@ -77,7 +92,7 @@ class PegawaiController extends Controller
             ],
             [
                 'title' => 'Tenaga Kependidikan',
-                'value' => ($countsLevel->get('Tenaga Kependidikan', 0)) + ($countsLevel->get('Tendik', 0)),
+                'value' => $this->hitungKelompokLevel($countsLevel, 'tendik'),
                 'href' => null,
                 'iconClass' => 'fa-solid fa-users-gear text-emerald-600',
                 'badgeText' => 'Tendik',
@@ -147,7 +162,7 @@ class PegawaiController extends Controller
             if (!empty($sp) && $sp !== 'Aktif') {
                 return $sp;
             }
-            return trim($p['nama_stspegawai'] ?? $p['statusKerja'] ?? 'PNS');
+            return trim($p['nama_stspegawai'] ?? $p['statusKerja'] ?? 'Tidak Diketahui');
         })->map->count();
 
         $cards = [];
@@ -159,21 +174,36 @@ class PegawaiController extends Controller
     }
 
 
-    private function buildWorkStatusCards($allPegawai): array
+    /**
+     * Jumlah pegawai untuk satu kelompok level, definisinya di config/pegawai.php.
+     */
+    private function hitungKelompokLevel($countsLevel, string $kunci): int
     {
-        $counts = $allPegawai->groupBy(fn($p) => trim($p['nama_stspegawai'] ?? $p['statusKerja'] ?? 'Lainnya'))->map->count();
+        $total = 0;
 
-        $standardLabels = ['PNS', 'PPPK', 'Honorer', 'BLU', 'PKWT', 'PPPK Paruh Waktu', 'Outsourcing', 'Non BLU', 'CPNS'];
-        $cards = [];
-
-        foreach ($standardLabels as $label) {
-            $cards[] = $this->makeWorkStatusCard($label, $counts->get($label, 0));
+        foreach (config("pegawai.kelompok_level.{$kunci}", []) as $namaLevel) {
+            $total += (int) $countsLevel->get($namaLevel, 0);
         }
 
+        return $total;
+    }
+
+    private function buildWorkStatusCards($allPegawai): array
+    {
+        $counts = $allPegawai
+            ->groupBy(fn($p) => trim($p['nama_stspegawai'] ?? $p['statusKerja'] ?? 'Tidak Diketahui'))
+            ->map->count()
+            ->sortDesc();
+
+        // Kartu dibentuk dari status kerja yang benar-benar ada pada data API,
+        // bukan dari daftar status tetap di kode.
+        $cards = [];
         foreach ($counts as $label => $count) {
-            if (!in_array($label, $standardLabels, true) && !empty($label) && $label !== 'Lainnya' && $count > 0) {
-                $cards[] = $this->makeWorkStatusCard($label, $count);
+            if (empty($label)) {
+                continue;
             }
+
+            $cards[] = $this->makeWorkStatusCard($label, $count);
         }
 
         return $cards;
@@ -181,19 +211,22 @@ class PegawaiController extends Controller
 
     private function buildLevelCards($allPegawai): array
     {
-        $counts = $allPegawai->groupBy(fn($p) => trim($p['nama_level_pegawai'] ?? $p['levelPegawai'] ?? 'Lainnya'))->map->count();
+        $counts = $allPegawai
+            ->groupBy(fn($p) => trim($p['nama_level_pegawai'] ?? $p['levelPegawai'] ?? 'Tidak Diketahui'))
+            ->map->count()
+            ->sortDesc();
 
-        $tendik = $counts->get('Tenaga Kependidikan', 0) + $counts->get('Tendik', 0);
-        $dosen = $counts->get('Dosen', 0);
-        $dosenDt = $counts->get('Dosen DT', 0);
-        $dosenLb = $counts->get('Dosen Luar Biasa', 0) + $counts->get('Dosen LB', 0);
+        // Kartu level mengikuti level yang dikirim API, tanpa penggabungan tetap.
+        $cards = [];
+        foreach ($counts as $label => $count) {
+            if (empty($label)) {
+                continue;
+            }
 
-        return [
-            $this->makeLevelCard('Tendik', $tendik),
-            $this->makeLevelCard('Dosen', $dosen),
-            $this->makeLevelCard('Dosen DT', $dosenDt),
-            $this->makeLevelCard('Dosen Luar Biasa', $dosenLb),
-        ];
+            $cards[] = $this->makeLevelCard($label, $count);
+        }
+
+        return $cards;
     }
 
 
@@ -295,10 +328,10 @@ class PegawaiController extends Controller
             'kodeData' => ['nullable', 'string', 'max:50'],
             'nip' => ['nullable', 'string', 'max:50'],
             'count' => ['nullable', 'integer', 'in:1'],
-            'status_pegawai' => ['nullable', 'integer', 'in:' . implode(',', self::STATUS_PEGAWAI)],
-            'status_kerja' => ['nullable', 'integer', 'in:' . implode(',', self::STATUS_KERJA)],
-            'level_pegawai' => ['nullable', 'integer', 'in:' . implode(',', self::LEVEL_PEGAWAI)],
-            'jabatan' => ['nullable', 'integer', 'in:' . implode(',', self::JABATAN)],
+            'status_pegawai' => ['nullable', 'integer', 'in:' . implode(',', $this->statusPegawaiIds())],
+            'status_kerja' => ['nullable', 'integer', 'in:' . implode(',', $this->statusKerjaIds())],
+            'level_pegawai' => ['nullable', 'integer', 'in:' . implode(',', $this->levelPegawaiIds())],
+            'jabatan' => ['nullable', 'integer', 'in:' . implode(',', $this->jabatanIds())],
         ]);
 
         $parameter = array_filter([
@@ -325,10 +358,10 @@ class PegawaiController extends Controller
     private function validatedFilters(Request $request): array
     {
         return $request->validate([
-            'status_pegawai' => ['nullable', 'integer', 'in:' . implode(',', self::STATUS_PEGAWAI)],
-            'status_kerja' => ['nullable', 'integer', 'in:' . implode(',', self::STATUS_KERJA)],
-            'level_pegawai' => ['nullable', 'integer', 'in:' . implode(',', self::LEVEL_PEGAWAI)],
-            'jabatan' => ['nullable', 'integer', 'in:' . implode(',', self::JABATAN)],
+            'status_pegawai' => ['nullable', 'integer', 'in:' . implode(',', $this->statusPegawaiIds())],
+            'status_kerja' => ['nullable', 'integer', 'in:' . implode(',', $this->statusKerjaIds())],
+            'level_pegawai' => ['nullable', 'integer', 'in:' . implode(',', $this->levelPegawaiIds())],
+            'jabatan' => ['nullable', 'integer', 'in:' . implode(',', $this->jabatanIds())],
         ]);
     }
 

@@ -38,6 +38,11 @@ return [
     'siakang' => [
         'base_url' => env('SIAKANG_API_BASE_URL'),
         'token' => env('SIAKANG_API_TOKEN'),
+        'username' => env('SIAKANG_API_USERNAME'),
+        'password' => env('SIAKANG_API_PASSWORD'),
+        'cf_clearance' => env('SIAKANG_CF_CLEARANCE'),
+        'user_agent' => env('SIAKANG_API_USER_AGENT'),
+        'cookie' => env('SIAKANG_API_COOKIE'),
     ],
 
     'simpeg' => [
@@ -58,5 +63,8 @@ return [
         'token' => env('SIPP_API_TOKEN'),
         'username' => env('SIPP_API_USERNAME'),
         'password' => env('SIPP_API_PASSWORD'),
+        'cf_clearance' => env('SIPP_CF_CLEARANCE'),
+        'user_agent' => env('SIPP_API_USER_AGENT'),
+        'cookie' => env('SIPP_API_COOKIE'),
     ],
 ];

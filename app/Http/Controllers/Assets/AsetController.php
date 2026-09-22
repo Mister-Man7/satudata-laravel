@@ -3,8 +3,12 @@
 namespace App\Http\Controllers\Assets;
 
 use App\Http\Controllers\Controller;
+use App\Services\Integrations\AssetSyncLauncher;
 use App\Services\Integrations\SimantapService;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Cache;
 
 class AsetController extends Controller
 {
@@ -18,7 +22,7 @@ class AsetController extends Controller
     public function index(Request $request)
     {
         $params = $request->only(['per_page', 'id_satker', 'search', 'all']);
-        $params['per_page'] = $params['per_page'] ?? 100;
+        $params['per_page'] = $params['per_page'] ?? config('aset.per_page.daftar', 100);
 
         $response = $this->apiService->makeRequest('GET', 'kampus', $params);
         $kampusList = $response['data']['data'] ?? $response['data'] ?? [];
@@ -33,107 +37,63 @@ class AsetController extends Controller
             $statusInfo = $this->getStatusBarangInfo();
         }
 
-        $datas = collect($kampusList)->map(function ($kampus) {
-            $totalStr = isset($kampus['total_aset']) && $kampus['total_aset'] > 0
-                ? number_format($kampus['total_aset'], 0, ',', '.') . ' Unit Aset'
-                : 'Lihat detail';
+        $kampusCounts = $this->asetCountsBy('id_kampus');
+
+        $datas = collect($kampusList)->map(function ($kampus) use ($kampusCounts) {
+            $id = $kampus['id_kampus'] ?? null;
+            $totalAset = (int) ($kampus['total_aset'] ?? $kampusCounts[$id] ?? 0);
 
             return [
-                'id' => $kampus['id_kampus'],
+                'id' => $id,
                 'title' => $kampus['nama_kampus'],
-                'count' => $totalStr,
-                'total_aset' => $kampus['total_aset'] ?? 0,
+                // API /kampus tidak mengembalikan total aset → agregasi tabel `asets`.
+                'count' => $totalAset > 0
+                    ? number_format($totalAset, 0, ',', '.') . ' Unit Aset'
+                    : null,
+                'total_aset' => $totalAset,
                 'icon' => 'building',
                 'updated' => $kampus['updated_at'] ?? now(),
             ];
         });
 
 
-        $summaryStats = \Illuminate\Support\Facades\Cache::remember('aset_big_card_stats', now()->addHours(1), function () use ($kampusList) {
+        $hitungRingkasan = function () use ($kampusList, $kampusCounts) {
             if (!class_exists(\App\Models\Aset::class) || !\Illuminate\Support\Facades\Schema::hasTable('asets')) {
                 return null;
             }
             $totalUnit = \App\Models\Aset::count();
             $nilaiPerolehan = \App\Models\Aset::sum('nilai_perolehan');
-            $kondisiBaik = \App\Models\Aset::where('kondisi', 1)->orWhere('kondisi_text', 'Baik')->count();
-            $kondisiRusakBerat = \App\Models\Aset::where('kondisi', 3)->orWhere('kondisi_text', 'Rusak Berat')->count();
-            $kondisiRusakRingan = \App\Models\Aset::where('kondisi', 2)->orWhere('kondisi_text', 'Rusak Ringan')->count();
+            $kondisiBaik = $this->scopeKondisi(\App\Models\Aset::query(), 'baik')->count();
+            $kondisiRusakBerat = $this->scopeKondisi(\App\Models\Aset::query(), 'rusak_berat')->count();
+            $kondisiRusakRingan = $this->scopeKondisi(\App\Models\Aset::query(), 'rusak_ringan')->count();
 
             $kampusBreakdown = [];
             $listToProcess = !empty($kampusList) ? $kampusList : [];
 
             if (empty($listToProcess)) {
-                $dbKampusNames = [
-                    'KAMPUS-SINDANGSARI' => 'Kampus Sindangsari',
-                    'KAMPUS-PAKUPATAN' => 'Kampus Pakupatan',
-                    'KAMPUS-KEPANDEAN' => 'Kampus Kepandean',
-                    'KAMPUS-CILEGON' => 'Kampus Cilegon',
-                    'KAMPUS-CIWARU' => 'Kampus Ciwaru',
-                ];
-                foreach ($dbKampusNames as $kId => $kName) {
-                    $listToProcess[] = [
-                        'id_kampus' => $kId,
-                        'nama_kampus' => $kName,
-                    ];
-                }
+                $listToProcess = $this->kampusDariData($kampusCounts);
             }
 
             foreach ($listToProcess as $kampus) {
-                $name = $kampus['nama_kampus'] ?? 'Kampus';
+                $name = $kampus['nama_kampus'] ?? '-';
                 $kId = $kampus['id_kampus'] ?? null;
                 $kw = trim(str_ireplace('kampus', '', $name));
 
                 $qBase = \App\Models\Aset::query();
-                if ($kId && !str_starts_with($kId, 'KAMPUS-')) {
+                // Id kampus dipakai langsung lewat kolom id_kampus; kampus hasil
+                // fallback pun berasal dari kolom yang sama di tabel aset.
+                if (!empty($kId) && isset($kampusCounts[$kId])) {
                     $qBase->where('id_kampus', $kId);
                 } elseif (!empty($kw)) {
                     $qBase->where('lokasi_lengkap', 'like', '%' . $kw . '%');
                 }
 
-                $baik = (clone $qBase)->where(function ($q) {
-                    $q->where('kondisi', 1)->orWhere('kondisi_text', 'Baik');
-                })->count();
+                $baik = $this->scopeKondisi(clone $qBase, 'baik')->count();
+                $rusakRingan = $this->scopeKondisi(clone $qBase, 'rusak_ringan')->count();
+                $rusakBerat = $this->scopeKondisi(clone $qBase, 'rusak_berat')->count();
 
-                $rusakRingan = (clone $qBase)->where(function ($q) {
-                    $q->where('kondisi', 2)->orWhere('kondisi_text', 'Rusak Ringan');
-                })->count();
-
-                $rusakBerat = (clone $qBase)->where(function ($q) {
-                    $q->where('kondisi', 3)->orWhere('kondisi_text', 'Rusak Berat');
-                })->count();
-
-                if (str_contains(strtoupper($name), 'SINDANGSARI')) {
-                    $unassignedBaik = \App\Models\Aset::where(function ($q) {
-                        $q->where('lokasi_lengkap', '-')
-                            ->orWhereNull('lokasi_lengkap')
-                            ->orWhere(function ($subq) {
-                                $subq->where('lokasi_lengkap', 'not like', '%Sindangsari%')
-                                    ->where('lokasi_lengkap', 'not like', '%Pakupatan%')
-                                    ->where('lokasi_lengkap', 'not like', '%Kepandean%')
-                                    ->where('lokasi_lengkap', 'not like', '%Cilegon%')
-                                    ->where('lokasi_lengkap', 'not like', '%Ciwaru%');
-                            });
-                    })->where(function ($q) {
-                        $q->where('kondisi', 1)->orWhere('kondisi_text', 'Baik');
-                    })->count();
-
-                    $unassignedRusakBerat = \App\Models\Aset::where(function ($q) {
-                        $q->where('lokasi_lengkap', '-')
-                            ->orWhereNull('lokasi_lengkap')
-                            ->orWhere(function ($subq) {
-                                $subq->where('lokasi_lengkap', 'not like', '%Sindangsari%')
-                                    ->where('lokasi_lengkap', 'not like', '%Pakupatan%')
-                                    ->where('lokasi_lengkap', 'not like', '%Kepandean%')
-                                    ->where('lokasi_lengkap', 'not like', '%Cilegon%')
-                                    ->where('lokasi_lengkap', 'not like', '%Ciwaru%');
-                            });
-                    })->where(function ($q) {
-                        $q->where('kondisi', 3)->orWhere('kondisi_text', 'Rusak Berat');
-                    })->count();
-
-                    $baik += $unassignedBaik;
-                    $rusakBerat += $unassignedRusakBerat;
-                }
+                // Baris yang tidak punya id kampus atau lokasi tidak diatribusikan
+                // ke kampus mana pun, jadi angka per kampus murni dari data.
 
                 $total = $baik + $rusakRingan + $rusakBerat;
                 $pctBaik = $total > 0 ? round(($baik / $total) * 100, 1) : 0;
@@ -155,10 +115,14 @@ class AsetController extends Controller
                 'kondisi_baik' => $kondisiBaik,
                 'kondisi_rusak_berat' => $kondisiRusakBerat,
                 'kondisi_rusak_ringan' => $kondisiRusakRingan,
-                'total_kampus' => count($kampusBreakdown) > 0 ? count($kampusBreakdown) : 5,
+                'total_kampus' => count($kampusBreakdown),
+                // Unit yang belum punya id kampus atau lokasi pada data sumber.
+                'total_tanpa_kampus' => max(0, $totalUnit - array_sum(array_column($kampusBreakdown, 'total_unit'))),
                 'kampus_breakdown' => $kampusBreakdown,
             ];
-        });
+        };
+
+        $summaryStats = $this->swr('aset_big_card_stats', 60, 10, $hitungRingkasan);
 
         return view('Assets.aset', compact('datas', 'warning', 'statusInfo', 'summaryStats'), [
             'title' => 'Aset',
@@ -167,32 +131,112 @@ class AsetController extends Controller
     }
 
     /**
-     * Normalisasi nilai kondisi dari angka atau teks
+     * Stale-while-revalidate untuk data turunan database: hasil cache langsung
+     * dipakai, pembaruannya dijalankan di latar belakang saat penanda segar lewat.
      */
-    protected function normalizeKondisi($item)
+    protected function swr(string $key, int $ttlMenit, int $umurSegarMenit, callable $hitung)
     {
-        // Kalau ada kondisi_text, langsung pakai
-        if (!empty($item['kondisi_text'])) {
-            return strtolower(trim($item['kondisi_text']));
+        $freshFlagKey = $key . '.fresh';
+
+        if (\Illuminate\Support\Facades\Cache::has($key)) {
+            $data = \Illuminate\Support\Facades\Cache::get($key);
+
+            if (!\Illuminate\Support\Facades\Cache::has($freshFlagKey) && function_exists('defer')) {
+                defer(function () use ($key, $freshFlagKey, $ttlMenit, $umurSegarMenit, $hitung) {
+                    try {
+                        \Illuminate\Support\Facades\Cache::put($key, $hitung(), now()->addMinutes($ttlMenit));
+                    } catch (\Throwable $e) {
+                        \Illuminate\Support\Facades\Log::warning("SWR {$key} gagal diperbarui: " . $e->getMessage());
+                    } finally {
+                        \Illuminate\Support\Facades\Cache::put($freshFlagKey, true, now()->addMinutes($umurSegarMenit));
+                    }
+                });
+            }
+
+            return $data;
         }
 
-        // Kalau ada nama_kondisi
-        if (!empty($item['nama_kondisi'])) {
-            return strtolower(trim($item['nama_kondisi']));
-        }
+        $data = $hitung();
+        \Illuminate\Support\Facades\Cache::put($key, $data, now()->addMinutes($ttlMenit));
+        \Illuminate\Support\Facades\Cache::put($freshFlagKey, true, now()->addMinutes($umurSegarMenit));
 
-        // Mapping dari angka ke teks (berdasarkan view aset-bmn: 1=Baik)
-        $kondisi = $item['kondisi'] ?? null;
-        if ($kondisi !== null) {
-            $mapping = [
-                1 => 'baik',
-                2 => 'rusak ringan',
-                3 => 'rusak berat',
+        return $data;
+    }
+
+    /**
+     * Pemetaan kunci kondisi ke kode dan label, sumbernya config/aset.php.
+     */
+    protected function kondisi(string $kunci): array
+    {
+        return config("aset.kondisi.{$kunci}", ['kode' => null, 'label' => null]);
+    }
+
+    /**
+     * Batasi query ke satu kondisi, dicocokkan lewat kode atau labelnya.
+     */
+    protected function scopeKondisi($query, string $kunci)
+    {
+        $kondisi = $this->kondisi($kunci);
+
+        return $query->where(function ($q) use ($kondisi) {
+            $q->where('kondisi', $kondisi['kode']);
+
+            if (!empty($kondisi['label'])) {
+                $q->orWhere('kondisi_text', $kondisi['label']);
+            }
+        });
+    }
+
+    /**
+     * Daftar kampus dari data aset yang tersimpan, dipakai bila API /kampus
+     * tidak mengembalikan data. Id maupun namanya berasal dari tabel `asets`.
+     */
+    protected function kampusDariData(array $kampusCounts): array
+    {
+        $list = [];
+
+        foreach (array_keys($kampusCounts) as $idKampus) {
+            if (empty($idKampus) || strtoupper((string) $idKampus) === 'NULL') {
+                continue;
+            }
+
+            $list[] = [
+                'id_kampus' => $idKampus,
+                'nama_kampus' => $this->namaKampusDariData((string) $idKampus),
             ];
-            return $mapping[(int) $kondisi] ?? 'tidak diketahui';
         }
 
-        return 'tidak diketahui';
+        return $list;
+    }
+
+    /**
+     * Nama kampus diambil dari data aset: payload Simantap lalu segmen pertama
+     * `lokasi_lengkap`. Bila keduanya kosong, id kampus dipakai apa adanya.
+     */
+    protected function namaKampusDariData(string $idKampus): string
+    {
+        $nama = null;
+
+        try {
+            $nama = \App\Models\Aset::where('id_kampus', $idKampus)
+                ->whereNotNull('payload')
+                ->value('payload->kampus->nama_kampus');
+
+            if (empty($nama)) {
+                $lokasi = \App\Models\Aset::where('id_kampus', $idKampus)
+                    ->whereNotNull('lokasi_lengkap')
+                    ->where('lokasi_lengkap', '!=', '-')
+                    ->value('lokasi_lengkap');
+
+                if (!empty($lokasi)) {
+                    $nama = trim(explode(' - ', $lokasi)[0]);
+                }
+            }
+        } catch (\Throwable $e) {
+            $nama = null;
+        }
+
+        return !empty($nama) ? $nama : $idKampus;
     }
 
     /**
@@ -209,15 +253,10 @@ class AsetController extends Controller
 
             if (class_exists(\Illuminate\Support\Facades\DB::class) && \Illuminate\Support\Facades\Schema::hasTable('asets')) {
                 $total = \Illuminate\Support\Facades\DB::table('asets')->count();
-                $rusakBerat = \Illuminate\Support\Facades\DB::table('asets')->where(function($q) {
-                    $q->where('kondisi_text', 'Rusak Berat')->orWhere('kondisi', 3);
-                })->count();
-                $rusakRingan = \Illuminate\Support\Facades\DB::table('asets')->where(function($q) {
-                    $q->where('kondisi_text', 'Rusak Ringan')->orWhere('kondisi', 2);
-                })->count();
-                $baik = \Illuminate\Support\Facades\DB::table('asets')->where(function($q) {
-                    $q->where('kondisi_text', 'Baik')->orWhere('kondisi', 1);
-                })->count();
+                $ases = \Illuminate\Support\Facades\DB::table('asets');
+                $rusakBerat = $this->scopeKondisi(clone $ases, 'rusak_berat')->count();
+                $rusakRingan = $this->scopeKondisi(clone $ases, 'rusak_ringan')->count();
+                $baik = $this->scopeKondisi(clone $ases, 'baik')->count();
                 $lainnya = max(0, $total - ($baik + $rusakRingan + $rusakBerat));
 
                 if ($total > 0) {
@@ -261,6 +300,36 @@ class AsetController extends Controller
         }
 
         return null;
+    }
+
+
+    /**
+     * Agregasi jumlah aset per kolom (`id_kampus`/`id_gedung`/`id_ruangan`) dari tabel `asets`.
+     *
+     * Endpoint list Simantap (/kampus, /gedung, /ruangan) tidak mengembalikan total aset,
+     * sedangkan endpoint detail hanya memberi jumlah anaknya (jumlah_gedung/jumlah_lantai).
+     * Nilai agregasi ini identik dengan `meta.total` pada /bmn-all/by-{kampus|gedung|ruangan}/{id}.
+     * Kolom-kolom ini belum ter-indeks, jadi hasilnya di-cache sebentar.
+     */
+    protected function asetCountsBy(string $column): array
+    {
+        try {
+            if (!class_exists(\App\Models\Aset::class) || !\Illuminate\Support\Facades\Schema::hasTable('asets')) {
+                return [];
+            }
+
+            return $this->swr("aset_counts_by.{$column}", 10, 5, function () use ($column) {
+                return \App\Models\Aset::query()
+                    ->select($column, \Illuminate\Support\Facades\DB::raw('COUNT(*) as total'))
+                    ->whereNotNull($column)
+                    ->groupBy($column)
+                    ->pluck('total', $column)
+                    ->map(fn ($total) => (int) $total)
+                    ->all();
+            });
+        } catch (\Throwable $e) {
+            return [];
+        }
     }
 
 
@@ -339,15 +408,19 @@ class AsetController extends Controller
                 ->all();
         }
 
-        $datas = collect($gedungList)->map(function ($gedung) {
-            $totalStr = isset($gedung['total_aset']) && $gedung['total_aset'] > 0
-                ? number_format($gedung['total_aset'], 0, ',', '.') . ' Unit BMN'
-                : 'Lihat Ruangan';
+        $gedungCounts = $this->asetCountsBy('id_gedung');
+
+        $datas = collect($gedungList)->map(function ($gedung) use ($gedungCounts) {
+            $id = $gedung['id_gedung'] ?? $gedung['id'] ?? null;
+            $totalAset = (int) ($gedung['total_aset'] ?? $gedungCounts[$id] ?? 0);
 
             return [
-                'id' => $gedung['id_gedung'] ?? $gedung['id'],
+                'id' => $id,
                 'title' => $gedung['nama_gedung'] ?? 'Nama Gedung Tidak Diketahui',
-                'count' => $totalStr,
+                // API /kampus/{id} tidak mengembalikan total BMN per gedung → agregasi tabel `asets`.
+                'count' => $totalAset > 0
+                    ? number_format($totalAset, 0, ',', '.') . ' Unit BMN'
+                    : null,
                 'icon' => 'map',
                 'updated' => $gedung['updated_at'] ?? now(),
             ];
@@ -420,15 +493,19 @@ class AsetController extends Controller
         ]);
 
         $gedungList = $response['data']['data'] ?? $response['data'] ?? [];
-        $datas = collect($gedungList)->map(function ($ruangan) {
-            $totalStr = isset($ruangan['total_aset']) && $ruangan['total_aset'] > 0
-                ? number_format($ruangan['total_aset'], 0, ',', '.') . ' Unit BMN'
-                : 'Lihat Aset';
+        $ruanganCounts = $this->asetCountsBy('id_ruangan');
+
+        $datas = collect($gedungList)->map(function ($ruangan) use ($ruanganCounts) {
+            $id = $ruangan['id_ruangan'] ?? null;
+            $totalAset = (int) ($ruangan['total_aset'] ?? $ruanganCounts[$id] ?? 0);
 
             return [
-                'id' => $ruangan['id_ruangan'],
+                'id' => $id,
                 'title' => $ruangan['nama_ruangan'] ?? 'Nama Ruangan',
-                'count' => $totalStr,
+                // API /ruangan/by-gedung/{id} tidak mengembalikan total BMN → agregasi tabel `asets`.
+                'count' => $totalAset > 0
+                    ? number_format($totalAset, 0, ',', '.') . ' Unit BMN'
+                    : null,
                 'icon' => 'door',
                 'updated' => $ruangan['updated_at'] ?? now(),
             ];
@@ -551,7 +628,7 @@ class AsetController extends Controller
     public function bmn($ruanganId, Request $request)
     {
         $params = $request->only(['per_page', 'status_sewa', 'kondisi', 'all']);
-        $params['per_page'] = $params['per_page'] ?? 1000;
+        $params['per_page'] = $params['per_page'] ?? config('aset.per_page.semua', 1000);
 
         $response = $this->apiService->makeRequest('GET', "bmn-all/by-ruangan/{$ruanganId}", $params);
         $rawList = $response['data']['data'] ?? $response['data'] ?? [];
@@ -562,8 +639,12 @@ class AsetController extends Controller
             $first = $bmnList->first();
             $lok = is_array($first) ? ($first['lokasi_lengkap'] ?? '') : ($first->lokasi_lengkap ?? '');
             if (!empty($lok)) {
-                $lParts = array_map('trim', explode('-', $lok));
-                $namaRuangan = end($lParts);
+                // Nama ruangan diambil dari segmen lokasi yang diawali "Ruang".
+                foreach (array_map('trim', explode(' - ', $lok)) as $bagian) {
+                    if (stripos($bagian, 'ruang') === 0) {
+                        $namaRuangan = $bagian;
+                    }
+                }
             }
         }
 
@@ -572,7 +653,7 @@ class AsetController extends Controller
             $namaRuangan = ucwords(strtolower(trim(str_replace('-', ' ', $cleanSlug))));
         }
         if (empty($namaRuangan)) {
-            $namaRuangan = 'Ruang Operasional';
+            $namaRuangan = '-';
         }
 
         return view('Assets.aset-bmn', [
@@ -738,6 +819,106 @@ class AsetController extends Controller
     {
         $response = $this->apiService->makeRequest('GET', "riwayat-pemeliharaan-ruangan/by-ruangan/{$ruanganId}");
         return view('aset-riwayat', ['datas' => $response['data'] ?? [], 'title' => 'Riwayat by Ruangan']);
+    }
+
+    /**
+     * Mulai penyegaran data aset (BMN SIMANTAP) dari tombol di halaman aset.
+     *
+     * Penarikan berjalan di proses terpisah memakai Chromium lokal di host aplikasi;
+     * halaman memantau hasilnya lewat syncStatus(). Pengguna tidak mengisi apa pun.
+     */
+    public function syncData(AssetSyncLauncher $launcher): JsonResponse
+    {
+        $key = 'aset_sync';
+        $cooldownKey = 'aset_sync_cooldown';
+        $status = Cache::get($key);
+
+        // Status "jalan" yang terlalu lama dianggap basi (mis. proses penarik mati),
+        // supaya tombol tetap bisa dipakai lagi.
+        $masihBerjalan = is_array($status)
+            && ($status['status'] ?? '') === 'jalan'
+            && isset($status['time'])
+            && now()->diffInMinutes(Carbon::parse($status['time'])) < 15;
+
+        if ($masihBerjalan) {
+            return response()->json([
+                'success' => true,
+                'status' => 'jalan',
+                'message' => 'Penyegaran data aset sedang berjalan.',
+            ]);
+        }
+
+        if (!$launcher->isAvailable()) {
+            Cache::put($key, [
+                'status' => 'gagal',
+                'message' => 'Host aplikasi tidak memiliki Edge/Chrome.',
+                'time' => now()->toDateTimeString(),
+            ], now()->addMinutes(15));
+
+            return response()->json([
+                'success' => false,
+                'status' => 'gagal',
+                'message' => 'Penarikan otomatis tidak tersedia di server ini (butuh Edge/Chrome di host aplikasi).',
+            ], 503);
+        }
+
+        // Jeda 3 menit: mencegah peluncuran berulang akibat tombol ditekan berkali-kali.
+        if (Cache::has($cooldownKey)) {
+            return response()->json([
+                'success' => true,
+                'status' => 'diam',
+                'message' => 'Data aset baru saja disegarkan.',
+            ]);
+        }
+
+        // Satu klik menyegarkan beberapa halaman BMN; jumlahnya dibatasi agar sumber daya
+        // host tetap terkendali. Sisa halaman dilanjutkan pada penekanan berikutnya.
+        $maxPages = max(1, (int) config('aset.tarik.max_pages', 5));
+
+        Cache::put($cooldownKey, true, now()->addMinutes(3));
+        Cache::put($key, [
+            'status' => 'jalan',
+            'message' => 'Menyegarkan data aset BMN dari SIMANTAP...',
+            'time' => now()->toDateTimeString(),
+        ], now()->addMinutes(30));
+
+        if (!$launcher->sync($maxPages, $key)) {
+            Cache::put($key, [
+                'status' => 'gagal',
+                'message' => 'Gagal menjalankan penarik data aset.',
+                'time' => now()->toDateTimeString(),
+            ], now()->addMinutes(15));
+
+            return response()->json([
+                'success' => false,
+                'status' => 'gagal',
+                'message' => 'Gagal menjalankan penarik data aset.',
+            ], 500);
+        }
+
+        return response()->json([
+            'success' => true,
+            'status' => 'jalan',
+            'message' => 'Penyegaran data aset dimulai.',
+        ], 202);
+    }
+
+    /**
+     * Status penyegaran data aset, dipantau oleh tombol di halaman aset.
+     */
+    public function syncStatus(): JsonResponse
+    {
+        $status = Cache::get('aset_sync');
+
+        return response()->json([
+            'success' => true,
+            'status' => is_array($status) ? ($status['status'] ?? 'belum') : 'belum',
+            'has_data' => is_array($status) ? ($status['has_data'] ?? null) : null,
+            'message' => is_array($status) ? ($status['message'] ?? '') : '',
+            'count' => is_array($status) ? ($status['count'] ?? null) : null,
+            'page' => is_array($status) ? ($status['page'] ?? null) : null,
+            'total_db' => is_array($status) ? ($status['total_db'] ?? null) : null,
+        ]);
     }
 
 }
