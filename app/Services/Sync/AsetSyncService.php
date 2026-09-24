@@ -45,12 +45,41 @@ class AsetSyncService
 
         $result = $this->fetchPage($token, $page, $perPage);
 
+        // SIMANTAP bisa menolak token yang tersimpan sebelum masa cache 60 menitnya habis.
+        // Satu kali login ulang + percobaan kedua, supaya penarikan tidak gagal sepanjang
+        // masa cache itu hanya karena token basi.
+        if ($result !== null && empty($result['ok']) && $this->aksesDitolak($result)) {
+            $token = ($this->login ?? app(LoginChromium::class))->loginSimantapSegar();
+
+            if ($token === null) {
+                return [
+                    'status' => false,
+                    'message' => 'Token SIMANTAP ditolak dan login ulang gagal.',
+                    'received' => 0,
+                    'meta' => [],
+                ];
+            }
+
+            $result = $this->fetchPage($token, $page, $perPage);
+        }
+
         if ($result === null) {
             return [
                 'status' => false,
                 'message' => 'Gagal menjalankan Chromium untuk mengambil data BMN.',
                 'received' => 0,
                 'meta' => [],
+            ];
+        }
+
+        if (empty($result['ok']) && $this->aksesDitolak($result)) {
+            // Pesan internal SIMANTAP ("Auth guard ... is not defined") tidak layak tampil
+            // di halaman; sebutkan sebabnya apa adanya.
+            return [
+                'status' => false,
+                'message' => 'Akses ke SIMANTAP ditolak: token tidak diterima walau sudah login ulang.',
+                'received' => 0,
+                'meta' => is_array($result['meta'] ?? null) ? $result['meta'] : [],
             ];
         }
 
@@ -170,7 +199,7 @@ class AsetSyncService
     /**
      * Ambil satu halaman BMN dari API SIMANTAP lewat Chromium.
      *
-     * @return array{ok: bool, message: string, items: array<int, array<string, mixed>>, meta: array<string, mixed>}|null
+     * @return array{ok: bool, status: int, message: string, items: array<int, array<string, mixed>>, meta: array<string, mixed>}|null
      */
     private function fetchPage(string $token, int $page, int $perPage): ?array
     {
@@ -196,12 +225,13 @@ const token = __TOKEN__;
 
         result = {
             ok: res.status === 200,
+            status: res.status,
             message: String(data?.message ?? text).slice(0, 140),
             items: list,
             meta: content?.meta ?? {},
         };
     } catch (e) {
-        result = { ok: false, message: e.message, items: [], meta: {} };
+        result = { ok: false, status: 0, message: e.message, items: [], meta: {} };
     }
 
     document.getElementById('result').textContent = JSON.stringify(result);
@@ -231,5 +261,26 @@ JS;
         $result = json_decode($fetcher->fetchResult($dump), true);
 
         return is_array($result) ? $result : null;
+    }
+
+    /**
+     * Apakah SIMANTAP menolak karena token tidak diterima (bukan karena data/halaman)?
+     *
+     * Request tanpa token yang sah dibalas HTTP 500 berisi "Auth guard [user_apis] is not
+     * defined." oleh SIMANTAP — seharusnya 401. Keduanya diperlakukan sama supaya token
+     * basi memicu login ulang, bukan kegagalan penarikan.
+     *
+     * @param  array<string, mixed>  $result
+     */
+    private function aksesDitolak(array $result): bool
+    {
+        $status = (int) ($result['status'] ?? 0);
+
+        if ($status === 401) {
+            return true;
+        }
+
+        return $status >= 500
+            && preg_match('/auth guard|unauthenticated|invalid token/i', (string) ($result['message'] ?? '')) === 1;
     }
 }

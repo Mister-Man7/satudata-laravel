@@ -115,7 +115,9 @@ class SyncAsetCommand extends Command
                 ? "{$totalSaved} baris disegarkan dari {$processed} halaman"
                 : 'tidak ada baris baru pada sesi ini');
 
-        // Status dibaca halaman aset lewat tombol "Tarik data aset".
+        // Status dibaca halaman aset lewat tombol "Tarik data aset" dan dipakai panel
+        // kesegaran data sebagai riwayat "terakhir berhasil ditarik", jadi umurnya
+        // disamakan dengan catatan pemicu (7 hari) — bukan 30 menit.
         Cache::put($statusKey, [
             'status' => $failureMessage === null ? 'selesai' : 'gagal',
             'message' => mb_substr($summary, 0, 250),
@@ -124,7 +126,7 @@ class SyncAsetCommand extends Command
             'page' => $lastProcessedPage,
             'total_db' => $totalDb,
             'time' => now()->toDateTimeString(),
-        ], now()->addMinutes(30));
+        ], now()->addDays(7));
 
         $this->newLine();
         $this->info("🎉 Sinkronisasi Aset selesai! Total data diproses pada sesi ini: {$totalSaved}");

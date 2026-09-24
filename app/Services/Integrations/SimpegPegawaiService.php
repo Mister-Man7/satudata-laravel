@@ -450,14 +450,12 @@ class SimpegPegawaiService extends AbstractApiClient
     }
 
     /**
-     * Map model database Pegawai ke array standar untuk cache dan normalisasi
+     * Map model database Pegawai ke array standar untuk cache dan normalisasi.
+     * Seluruh nilai diambil dari kolom tabel `pegawais`; payload JSON tidak lagi
+     * dipakai sebagai sumber data.
      */
-    private function mapDbPegawaiToItem(\App\Models\Pegawai $item): array
+    public function mapDbPegawaiToItem(\App\Models\Pegawai $item): array
     {
-        if (is_array($item->payload) && !empty($item->payload)) {
-            return $item->payload;
-        }
-
         return [
             'kodeData'           => $item->kode_data,
             'kd_pegawai'         => $item->kode_data,

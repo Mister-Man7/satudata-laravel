@@ -43,6 +43,9 @@ class MahasiswaSyncService
                 'jenjang_id' => $mhs['jenjang_id'] ?? '',
                 'dosen_wali_id' => $mhs['dosen_wali_id'] ?? '',
                 'angkatan' => $mhs['angkatan'] ?? null,
+                // Kolom terpisah agar hitungan per semester tidak perlu membongkar JSON.
+                'periode_masuk' => $mhs['periode_masuk'] ?? null,
+                'lulus_pada' => $mhs['tanggal_lulus'] ?? $mhs['tanggal_ijazah'] ?? null,
                 'tanggal_masuk' => $mhs['tanggal_masuk'] ?? '',
                 'kewarganegaraan' => $mhs['kewarganegaraan'] ?? 'ID',
 
@@ -74,7 +77,9 @@ class MahasiswaSyncService
                         'dosen_wali_id',
                         'angkatan',
                         'tanggal_masuk',
+                        'periode_masuk',
                         'kewarganegaraan',
+                        'lulus_pada',
                         'agama',
                         'jenis_kelamin_string',
                         'tempat_tanggal_lahir',

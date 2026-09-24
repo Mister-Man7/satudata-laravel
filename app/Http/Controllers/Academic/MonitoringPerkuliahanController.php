@@ -41,24 +41,11 @@ class MonitoringPerkuliahanController extends Controller
     }
 
     /**
-     * Mapping kode_fakultas per unit untuk API /v2/mata_kuliah/tingkat-fakultas.
-     */
-    protected function getUnitFakultasMapping(): array
-    {
-        return [
-            'FH' => '11',
-            'FKIP' => '22',
-            'FT' => '33',
-            'FAPERTA' => '44',
-            'FEB' => '55',
-            'FISIP' => '66',
-            'PASCA' => '77',
-            'FKIK' => '88',
-        ];
-    }
-
-    /**
      * Mapping prodi per fakultas/unit untuk API /v2/mata_kuliah/tingkat-prodi.
+     *
+     * Dipakai menghitung jumlah MK per fakultas = total MK seluruh prodinya. Endpoint
+     * tingkat-fakultas tidak bisa menggantikannya: isinya hanya MK tingkat fakultas
+     * (mis. FAPERTA = 6, sedangkan seluruh MK prodinya ratusan).
      */
     protected function getUnitProdiMapping(): array
     {
@@ -110,6 +97,31 @@ class MonitoringPerkuliahanController extends Controller
         return "{$tahun}/{$tahunPlus} Gasal";
     }
 
+    /**
+     * Data mata kuliah dibaca dari cache saja: penarikan API berjalan di latar belakang
+     * (lihat SiakangMataKuliahService), sehingga halaman tidak pernah menunggu upstream.
+     * Hasil kosong tidak disimpan supaya halaman tidak terkunci kosong selama 6 jam.
+     *
+     * @param  callable(): array<int, mixed>  $ambil
+     * @return array<int, mixed>
+     */
+    private function dataMataKuliah(string $cacheKey, callable $ambil): array
+    {
+        $data = (array) Cache::get($cacheKey, []);
+
+        if (!empty($data)) {
+            return $data;
+        }
+
+        $data = (array) $ambil();
+
+        if (!empty($data)) {
+            Cache::put($cacheKey, $data, now()->addHours(6));
+        }
+
+        return $data;
+    }
+
     public function index(Request $request): View
     {
         $semester = $this->getKodeSemesterTerkini($request->input('semester'));
@@ -156,10 +168,11 @@ class MonitoringPerkuliahanController extends Controller
             'nama_semester' => $this->getNamaSemesterLabel($semester)
         ];
 
-        // 1. Data MKU dari API /v2/mata_kuliah/tingkat-universitas
-        $mkuData = Cache::remember('siakang_mk_universitas_all', now()->addHours(6), function () {
-            return $this->mataKuliahService->getAllMataKuliahTingkatUniversitas();
-        });
+        // 1. Data MKU dari cache hasil penarikan /v2/mata_kuliah/tingkat-universitas
+        $mkuData = $this->dataMataKuliah(
+            'siakang_mk_universitas_all',
+            fn () => $this->mataKuliahService->getAllMataKuliahTingkatUniversitas()
+        );
 
         if (!empty($mkuData)) {
             $unitCounters['MKU']['jumlah_mk'] = count($mkuData);
@@ -199,22 +212,24 @@ class MonitoringPerkuliahanController extends Controller
             'PASCA' => ['jumlah_mk' => 95, 'total_sks' => 180, 'sks_teori' => 150, 'sks_praktik' => 30],
         ];
 
-        $unitProdiMapping = $this->getUnitProdiMapping();
-        $cacheKey = "monitoring_fakultas_counts_{$semester}";
-        $freshFlagKey = "monitoring_fakultas_counts_fresh_{$semester}";
+        // Kunci terpisah dari $cacheKey (data tampilan, 15 menit). Dulu keduanya memakai satu
+        // nama variabel/kunci, sehingga angka per fakultas bisa terbaca dari data tampilan —
+        // daftar unitnya tidak ada di sana — dan seluruh fakultas tampil 0.
+        $countsKey = "monitoring_fakultas_counts_{$semester}";
+        $countsFreshKey = "monitoring_fakultas_counts_fresh_{$semester}";
 
-        if (Cache::has($cacheKey)) {
-            $fakultasCounts = Cache::get($cacheKey);
+        if (Cache::has($countsKey)) {
+            $fakultasCounts = (array) Cache::get($countsKey);
 
-            if (!Cache::has($freshFlagKey) && function_exists('defer')) {
-                defer(fn () => $this->refreshFakultasCounts($semester, $unitProdiMapping, $defaultFallbacks, $cacheKey, $freshFlagKey));
+            if (!Cache::has($countsFreshKey) && function_exists('defer')) {
+                defer(fn () => $this->refreshFakultasCounts($semester, $fakultasCounts, $defaultFallbacks, $countsKey, $countsFreshKey));
             }
         } else {
             $fakultasCounts = $defaultFallbacks;
-            Cache::put($cacheKey, $fakultasCounts, now()->addHours(6));
+            Cache::put($countsKey, $fakultasCounts, now()->addHours(6));
 
             if (function_exists('defer')) {
-                defer(fn () => $this->refreshFakultasCounts($semester, $unitProdiMapping, $defaultFallbacks, $cacheKey, $freshFlagKey));
+                defer(fn () => $this->refreshFakultasCounts($semester, $fakultasCounts, $defaultFallbacks, $countsKey, $countsFreshKey));
             }
         }
 
@@ -264,6 +279,9 @@ class MonitoringPerkuliahanController extends Controller
             'totalJadwal' => array_sum(array_column($monitoringData, 'jumlah_jadwal')),
             'totalMK' => array_sum(array_column($monitoringData, 'jumlah_mk')),
             'totalSKS' => array_sum(array_column($monitoringData, 'total_sks')),
+            // Waktu data ini disusun, bukan waktu halaman dibuka: halaman bisa dilayani dari
+            // cache, jadi label "Last update" harus mengikuti umur datanya.
+            'diperbarui_pada' => now()->toDateTimeString(),
         ];
 
         if (!$filterNip) {
@@ -309,11 +327,18 @@ class MonitoringPerkuliahanController extends Controller
         $dosenResponse = $this->pegawaiService->getDataDosen();
         $allDosenList = $dosenResponse->success ? ($dosenResponse->data ?? []) : [];
 
-        // Ambil data mahasiswa aktif (array) dari API /v2/mahasiswa-aktif (detail_per_prodi)
-        $mahasiswaAktifData = Cache::remember('siakang_mahasiswa_aktif_array_v6', now()->addHours(6), function () {
+        // Ambil data mahasiswa aktif (array) dari cache/database lokal; penarikan API berjalan
+        // di latar belakang. Hasil kosong tidak disimpan agar tidak terkunci 6 jam.
+        $mahasiswaAktifData = (array) Cache::get('siakang_mahasiswa_aktif_array_v6', []);
+
+        if (empty($mahasiswaAktifData)) {
             $res = $this->mahasiswaAktifService->getData();
-            return $res->data ?? [];
-        });
+            $mahasiswaAktifData = (array) ($res->data ?? []);
+
+            if (!empty($mahasiswaAktifData)) {
+                Cache::put('siakang_mahasiswa_aktif_array_v6', $mahasiswaAktifData, now()->addHours(6));
+            }
+        }
 
         $allProdiApi = $mahasiswaAktifData['detail_per_prodi'] ?? ($mahasiswaAktifData[0]['detail_per_prodi'] ?? []);
 
@@ -465,12 +490,12 @@ class MonitoringPerkuliahanController extends Controller
         $selectedProdiName = ($unitKode === 'MKU') ? 'Mata Kuliah Umum' : '';
 
         if ($unitKode === 'MKU') {
-            $mataKuliahList = Cache::remember('siakang_mk_universitas_all', now()->addHours(6), function () {
-                return $this->mataKuliahService->getAllMataKuliahTingkatUniversitas();
-            });
+            $mataKuliahList = $this->dataMataKuliah(
+                'siakang_mk_universitas_all',
+                fn () => $this->mataKuliahService->getAllMataKuliahTingkatUniversitas()
+            );
 
-            $dosenCount = count($facultyDosenList);
-            foreach ($mataKuliahList as $idx => $mk) {
+            foreach ($mataKuliahList as $mk) {
                 $kodeMk = $mk['kode_mata_kuliah'] ?? ($mk['kode'] ?? '-');
                 $mapInfo = $penjadwalanMap[$kodeMk] ?? null;
 
@@ -485,9 +510,9 @@ class MonitoringPerkuliahanController extends Controller
                     $sksTeori = $sksTotal;
                 }
 
-                $dosenItem = $dosenCount > 0 ? $facultyDosenList[$idx % $dosenCount] : null;
-                $nipDosen = $mapInfo['nip_dosen'] ?? ($dosenItem['nip'] ?? '-');
-                $namaDosen = $mapInfo['nama_dosen'] ?? ($dosenItem['nama'] ?? 'Tim Dosen Pengampu');
+                // Dosen pengampu hanya dari data penjadwalan; tanpa data, tampilkan '-'.
+                $nipDosen = $mapInfo['nip_dosen'] ?? '-';
+                $namaDosen = $mapInfo['nama_dosen'] ?? '-';
                 $jamKuliah = $mapInfo['jam_kuliah'] ?? 'Sesuai Jadwal SIMASTER';
                 $kelas = $mapInfo['kelas'] ?? 'Reguler';
                 $ruang = $mapInfo['ruang'] ?? '-';
@@ -524,9 +549,10 @@ class MonitoringPerkuliahanController extends Controller
                 $selectedProdiName = "Prodi {$selectedKodeProdi}";
             }
 
-            $prodiItems = Cache::remember("siakang_mk_prodi_{$selectedKodeProdi}", now()->addHours(6), function () use ($selectedKodeProdi) {
-                return $this->mataKuliahService->getAllMataKuliahTingkatProdi($selectedKodeProdi);
-            });
+            $prodiItems = $this->dataMataKuliah(
+                "siakang_mk_prodi_{$selectedKodeProdi}",
+                fn () => $this->mataKuliahService->getAllMataKuliahTingkatProdi($selectedKodeProdi)
+            );
 
             if (empty($prodiItems)) {
                 if (!empty($penjadwalanMap)) {
@@ -548,11 +574,13 @@ class MonitoringPerkuliahanController extends Controller
                         ];
                     }
                 } else {
-                    $jadwalRows = $this->generateFallbackMataKuliahForProdi($selectedKodeProdi, $selectedProdiName, $facultyDosenList, $penjadwalanMap);
+                    // Tidak ada data mata kuliah untuk prodi ini: tabel dikosongkan supaya
+                    // halaman menampilkan keterangan "belum ada data". Dulu di sini tabel diisi
+                    // baris contoh dengan nama MK, kode, dan SKS yang dikarang.
+                    $jadwalRows = [];
                 }
             } else {
-                $dosenCount = count($facultyDosenList);
-                foreach ($prodiItems as $idx => $mk) {
+                foreach ($prodiItems as $mk) {
                     $kodeMk = $mk['kode_mata_kuliah'] ?? ($mk['kode'] ?? '-');
                     $mapInfo = $penjadwalanMap[$kodeMk] ?? null;
 
@@ -567,9 +595,9 @@ class MonitoringPerkuliahanController extends Controller
                         $sksTeori = $sksTotal;
                     }
 
-                    $dosenItem = $dosenCount > 0 ? $facultyDosenList[$idx % $dosenCount] : null;
-                    $nipDosen = $mapInfo['nip_dosen'] ?? ($dosenItem['nip'] ?? '-');
-                    $namaDosen = $mapInfo['nama_dosen'] ?? ($dosenItem['nama'] ?? ('Dosen Pengampu ' . ($mk['nama_mata_kuliah'] ?? '')));
+                    // Dosen pengampu hanya diisi dari data penjadwalan; tanpa data tampilkan '-'.
+                    $nipDosen = $mapInfo['nip_dosen'] ?? '-';
+                    $namaDosen = $mapInfo['nama_dosen'] ?? '-';
                     $jamKuliah = $mapInfo['jam_kuliah'] ?? 'Sesuai Jadwal SIMASTER';
                     $kelas = $mapInfo['kelas'] ?? 'Reguler';
                     $ruang = $mapInfo['ruang'] ?? '-';
@@ -734,68 +762,6 @@ class MonitoringPerkuliahanController extends Controller
         return view('academic.monitoring-perkuliahan-detail', $viewData);
     }
 
-    /**
-     * Generate fallback Mata Kuliah list for prodi where external API returns 0 items.
-     */
-    protected function generateFallbackMataKuliahForProdi(string $kodeProdi, string $prodiName, array $facultyDosenList = [], array $penjadwalanMap = []): array
-    {
-        $mkTemplates = [
-            'Pengantar ' . $prodiName,
-            'Metodologi Penelitian & Penulisan Ilmiah',
-            'Etika Profesi & Tata Kelola',
-            'Teori & Konsep Dasar ' . $prodiName,
-            'Praktikum & Aplikasi Terapan I',
-            'Praktikum & Aplikasi Terapan II',
-            'Sistem & Analisis Kebijakan',
-            'Manajemen & Strategi ' . $prodiName,
-            'Kapita Selekta ' . $prodiName,
-            'Praktik Kerja Lapangan / Magang',
-            'Klinik & Studi Kasus Terpadu',
-            'Seminar Proposal & Kolokium',
-            'Statistika & Pengolahan Data',
-            'Teknologi & Inovasi ' . $prodiName,
-            'Tugas Akhir / Skripsi / Tesis / Spesialisasi',
-        ];
-
-        $dosenCount = count($facultyDosenList);
-        $rows = [];
-        foreach ($mkTemplates as $idx => $namaMk) {
-            $no = $idx + 1;
-            $prefix = strlen($kodeProdi) >= 3 ? strtoupper(substr($kodeProdi, 0, 3)) : 'MKP';
-            $kodeMk = $prefix . sprintf('%03d', $no * 10 + 1);
-
-            $mapInfo = $penjadwalanMap[$kodeMk] ?? null;
-
-            $sksTeori = ($no % 3 == 0) ? 1 : 2;
-            $sksPraktik = ($no % 3 == 0) ? 2 : 1;
-            $sksTotal = $mapInfo['sks'] ?? ($sksTeori + $sksPraktik);
-
-            $dosenItem = $dosenCount > 0 ? $facultyDosenList[$idx % $dosenCount] : null;
-            $nipDosen = $mapInfo['nip_dosen'] ?? ($dosenItem['nip'] ?? '-');
-            $namaDosen = $mapInfo['nama_dosen'] ?? ($dosenItem['nama'] ?? ('Dosen Pengampu ' . $namaMk));
-            $jamKuliah = $mapInfo['jam_kuliah'] ?? 'Sesuai Jadwal SIMASTER';
-            $kelas = $mapInfo['kelas'] ?? 'Reguler';
-            $ruang = $mapInfo['ruang'] ?? '-';
-
-            $rows[] = [
-                'kode_mk' => $kodeMk,
-                'nama_mk' => $namaMk,
-                'sks' => $sksTotal,
-                'sks_teori' => $sksTeori,
-                'sks_praktik' => $sksPraktik,
-                'tahun_terbit' => '2025',
-                'kode_jadwal' => '-',
-                'jam_kuliah' => $jamKuliah,
-                'kelas' => $kelas,
-                'ruang' => $ruang,
-                'nip_dosen' => $nipDosen,
-                'nama_dosen' => $namaDosen,
-            ];
-        }
-
-        return $rows;
-    }
-
     protected function getPenjadwalanMapForUnit(string $unitKode, string $semester, array $facultyDosenList): array
     {
         // Penjadwalan riil per dosen sudah di-handle secara efisien per dosen saat user memfilter NIP.
@@ -805,12 +771,18 @@ class MonitoringPerkuliahanController extends Controller
 
     /**
      * Revalidasi data jumlah mata kuliah per fakultas dari API di background via defer.
+     *
+     * Jumlah MK per fakultas dihitung dari total MK seluruh prodinya (endpoint tingkat-prodi
+     * per prodi) — endpoint tingkat-fakultas hanya memuat MK tingkat fakultas, jadi tidak bisa
+     * dipakai menggantikan angka ini. Penarikannya berat (±60 permintaan), karena itu penanda
+     * segarnya berlaku 6 jam (dulu 20 menit, sehingga beban itu terulang tiga kali per jam).
+     * Bila ada prodi yang gagal ditarik, angka fakultas yang sudah ada tetap dipakai — bukan 0.
      */
-    protected function refreshFakultasCounts(string $semester, array $unitProdiMapping, array $defaultFallbacks, string $cacheKey, string $freshFlagKey): void
+    protected function refreshFakultasCounts(string $semester, array $countsSekarang, array $defaultFallbacks, string $countsKey, string $countsFreshKey): void
     {
-        $counts = [];
+        $counts = array_replace($defaultFallbacks, $countsSekarang);
 
-        foreach ($unitProdiMapping as $k => $prodiList) {
+        foreach ($this->getUnitProdiMapping() as $k => $prodiList) {
             $totalMkFakultas = 0;
 
             foreach ($prodiList as $kodeProdi) {
@@ -825,25 +797,20 @@ class MonitoringPerkuliahanController extends Controller
                 }
             }
 
-            if ($totalMkFakultas > 0) {
-                $sksEst = $totalMkFakultas * 3;
-                $counts[$k] = [
-                    'jumlah_mk' => $totalMkFakultas,
-                    'total_sks' => $sksEst,
-                    'sks_teori' => (int) round($sksEst * 0.75),
-                    'sks_praktik' => (int) round($sksEst * 0.25),
-                ];
-            } else {
-                $counts[$k] = $defaultFallbacks[$k] ?? [
-                    'jumlah_mk' => 100,
-                    'total_sks' => 250,
-                    'sks_teori' => 200,
-                    'sks_praktik' => 50,
-                ];
+            if ($totalMkFakultas <= 0) {
+                continue;
             }
+
+            $sksEst = $totalMkFakultas * 3;
+            $counts[$k] = [
+                'jumlah_mk' => $totalMkFakultas,
+                'total_sks' => $sksEst,
+                'sks_teori' => (int) round($sksEst * 0.75),
+                'sks_praktik' => (int) round($sksEst * 0.25),
+            ];
         }
 
-        Cache::put($cacheKey, $counts, now()->addHours(6));
-        Cache::put($freshFlagKey, true, now()->addMinutes(20));
+        Cache::put($countsKey, $counts, now()->addHours(6));
+        Cache::put($countsFreshKey, true, now()->addHours(6));
     }
 }

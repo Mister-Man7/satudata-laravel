@@ -15,6 +15,8 @@ class Mahasiswa extends Model
         'jenjang_id',
         'dosen_wali_id',
         'angkatan',
+        'periode_masuk',
+        'lulus_pada',
         'tanggal_masuk',
         'kewarganegaraan',
         'agama',

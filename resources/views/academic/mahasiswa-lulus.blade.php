@@ -3,6 +3,9 @@
         {{ $title }}
     </x-slot:title>
 
+    {{-- Daftar lulusan ditarik dari SIAKANG. --}}
+    <x-ui.data-freshness sumber="siakang.lulusan" />
+
     <section class="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
         <div class="mb-6">
             <a href="{{ route('akademik') }}" class="inline-flex items-center text-[#4B00FF] hover:text-violet-800 font-semibold text-sm transition-colors">

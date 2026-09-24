@@ -48,7 +48,7 @@ class SearchActiveStudents implements Tool
             ])->all();
 
             return json_encode([
-                'sumber' => 'API SIAKANG /v2/mahasiswa',
+                'sources' => 'API SIAKANG /v2/mahasiswa',
                 'total_ditemukan' => count($mapped),
                 'data_mahasiswa' => $mapped,
             ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
@@ -77,7 +77,7 @@ class SearchActiveStudents implements Tool
             ])->all();
 
             return json_encode([
-                'sumber' => 'Database Lokal Satudata',
+                'sources' => 'Database Lokal Satudata',
                 'total_ditemukan' => count($mapped),
                 'data_mahasiswa' => $mapped,
             ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);

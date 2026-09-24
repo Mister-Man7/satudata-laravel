@@ -43,7 +43,7 @@ class SearchPublications implements Tool
                 ])->all();
 
                 return json_encode([
-                    'sumber' => 'API SIPP UNTIRTA',
+                    'sources' => 'API SIPP UNTIRTA',
                     'total_ditemukan' => count($mapped),
                     'data_publikasi' => $mapped,
                 ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
@@ -53,7 +53,7 @@ class SearchPublications implements Tool
         }
 
         return json_encode([
-            'sumber' => 'API SIPP UNTIRTA',
+            'sources' => 'API SIPP UNTIRTA',
             'status' => 'Data publikasi belum dapat dihubungi atau tidak ada hasil untuk filter tersebut.',
             'filter_digunakan' => [
                 'nip' => $nip ?: null,

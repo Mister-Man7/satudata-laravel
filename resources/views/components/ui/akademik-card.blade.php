@@ -27,13 +27,16 @@
                     </div>
                     <div class="mt-3">
                         <h2 class="text-3xl font-bold text-gray-800">
-                            {{ is_numeric($value) ? number_format($value, 0, ',', '.') : $value }}
+                            {{-- Nilai null berarti sumbernya belum punya data untuk periode ini. --}}
+                            {{ $value === null ? '-' : (is_numeric($value) ? number_format($value, 0, ',', '.') : $value) }}
                         </h2>
                     </div>
 
                     <div class="mt-4 flex items-center gap-2">
-                        <span
-                            class="{{ $badgeColor }} text-white text-[10px] font-bold px-1.5 py-0.5 rounded leading-none">{{ $badgeText }}</span>
+                        @if($badgeText)
+                            <span
+                                class="{{ $badgeColor }} text-white text-[10px] font-bold px-1.5 py-0.5 rounded leading-none">{{ $badgeText }}</span>
+                        @endif
                         <span class="text-xs text-gray-400">{{ $footerText }}</span>
                     </div>
                 </div>

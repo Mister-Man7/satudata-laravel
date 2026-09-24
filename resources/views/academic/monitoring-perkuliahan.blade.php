@@ -31,7 +31,7 @@
                 </h2>
                 <div class="flex items-center gap-2 text-sm text-gray-600">
                     <i class="fa-regular fa-clock text-gray-400"></i>
-                    <span>Last update at: {{ now()->format('Y-m-d H:i:s') }} WIB</span>
+                    <span>Last update at: {{ $diperbarui_pada ?? now()->format('Y-m-d H:i:s') }} WIB</span>
                 </div>
             </div>
 
@@ -235,7 +235,7 @@
                 td:nth-child(1), td:nth-child(2), td:nth-child(10) { text-align: center; }
             </style></head><body>
                 <h1>${title}</h1>
-                <p>Last update at: {{ now()->format('Y-m-d H:i:s') }} WIB</p>
+                <p>Last update at: {{ $diperbarui_pada ?? now()->format('Y-m-d H:i:s') }} WIB</p>
                 ${table.outerHTML}
             </body></html>`);
             w.document.close();

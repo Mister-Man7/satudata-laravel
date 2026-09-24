@@ -18,6 +18,11 @@ use Illuminate\Support\Facades\Log;
 class LoginChromium
 {
     /**
+     * Kunci cache token SIMANTAP, dipakai bersama SimantapService.
+     */
+    public const SIMANTAP_TOKEN_KEY = 'simantap_api_token';
+
+    /**
      * Biner Chromium yang tersedia di host ini.
      */
     public function browser(): ?string
@@ -49,7 +54,7 @@ class LoginChromium
      */
     public function loginSimantap(): ?string
     {
-        $token = Cache::remember('simantap_api_token', now()->addMinutes(60), function () {
+        $token = Cache::remember(self::SIMANTAP_TOKEN_KEY, now()->addMinutes(60), function () {
             return (string) ($this->runLogin(
                 'simantap',
                 (string) config('services.simantap.base_url'),
@@ -62,6 +67,19 @@ class LoginChromium
         });
 
         return is_string($token) && $token !== '' ? $token : null;
+    }
+
+    /**
+     * Ambil token SIMANTAP dengan mengabaikan cache.
+     *
+     * Dipakai ketika API menolak token yang tersimpan: SIMANTAP bisa menganggap token basi
+     * sebelum masa cache 60 menit habis, dan penarikan tidak boleh gagal sepanjang masa itu.
+     */
+    public function loginSimantapSegar(): ?string
+    {
+        Cache::forget(self::SIMANTAP_TOKEN_KEY);
+
+        return $this->loginSimantap();
     }
 
     /**

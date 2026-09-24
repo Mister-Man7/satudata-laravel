@@ -75,15 +75,40 @@ abstract class ProcessLauncher
      */
     protected function luncurkan(array $arguments, string $logFile, string $workDirectory, array $context = []): bool
     {
+        return $this->luncurkanBagian(
+            array_merge([PHP_BINARY, base_path('artisan')], $arguments),
+            $logFile,
+            $workDirectory,
+            $context
+        );
+    }
+
+    /**
+     * Jalankan rangkaian perintah (PHP + target + argumen) di proses terpisah.
+     *
+     * Dipakai peluncur perintah umum yang menargetkan skrip Chromium maupun
+     * perintah artisan.
+     *
+     * @param  array<int, string>  $bagian  mis. [PHP_BINARY, 'scripts/sync-portofolio.php', '--limit=25']
+     */
+    protected function luncurkanBagian(array $bagian, string $logFile, string $workDirectory, array $context = []): bool
+    {
+        // Pengujian tidak boleh meluncurkan penarik sungguhan: halaman yang diuji ikut
+        // memicu revalidasi SWR, dan proses yang lahir akan menembak API asli sambil
+        // memakai database pengujian.
+        if (app()->runningUnitTests()) {
+            Log::info(ucfirst($this->label()) . ' dilewati pada lingkungan pengujian.', $context);
+
+            return true;
+        }
+
         if (!$this->isAvailable()) {
             Log::warning('Penarik tidak tersedia: host tanpa Edge/Chrome.', ['penarik' => $this->label()]);
 
             return false;
         }
 
-        $command = escapeshellarg(PHP_BINARY)
-            . ' ' . escapeshellarg(base_path('artisan'))
-            . ' ' . implode(' ', array_map('escapeshellarg', $arguments));
+        $command = implode(' ', array_map('escapeshellarg', $bagian));
 
         $logFile = storage_path('logs/' . $logFile);
         $workDirectory = storage_path('app/' . $workDirectory);

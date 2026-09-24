@@ -3,6 +3,9 @@
         {{ $title ?? 'Pegawai' }}
     </x-slot:title>
 
+    {{-- Data pegawai ditarik dari SIMPEG. --}}
+    <x-ui.data-freshness sumber="simpeg.pegawai" />
+
     @php
         $daftarStatistik = $daftarStatistik ?? [];
         $statusPegawai = $statusPegawai ?? [];

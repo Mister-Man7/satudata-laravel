@@ -31,7 +31,7 @@ class SimantapService extends AbstractApiClient
      */
     protected function getBearerToken(array $config): string
     {
-        return Cache::remember('simantap_api_token', now()->addMinutes(60), function () use ($config) {
+        return Cache::remember(LoginChromium::SIMANTAP_TOKEN_KEY, now()->addMinutes(60), function () use ($config) {
             $email = config('services.simantap.email');
             $password = config('services.simantap.password');
             $fallbackToken = config('services.simantap.token');
@@ -94,7 +94,7 @@ class SimantapService extends AbstractApiClient
         $response = parent::request($method, $endpoint, $payload);
 
         if ($response->status === 401) {
-            Cache::forget('simantap_api_token');
+            Cache::forget(LoginChromium::SIMANTAP_TOKEN_KEY);
             Log::info('Simantap: Token expired, retry dengan token baru');
             return parent::request($method, $endpoint, $payload);
         }
@@ -198,17 +198,13 @@ class SimantapService extends AbstractApiClient
      */
     protected function refreshFromApiBackground(string $endpoint, array $params, string $cacheKey, string $freshFlagKey): void
     {
-        try {
-            $response = $this->get($endpoint, $params);
-            if ($response->success && !empty($response->data)) {
-                $apiData = $response->data;
-                Cache::put($cacheKey, $apiData, now()->addHours(6));
-                Cache::put($freshFlagKey, true, now()->addMinutes(20));
-                Log::info("Simantap SWR: Berhasil background refresh dari API untuk {$endpoint}");
-            }
-        } catch (\Throwable $e) {
-            Log::warning("Simantap SWR: Gagal background refresh untuk {$endpoint}: " . $e->getMessage());
-        }
+        // Panggilan HTTP langsung dari PHP selalu ditantang Cloudflare (HTTP 403
+        // "Just a moment"), jadi penarikan dialihkan ke penarik Chromium lokal
+        // lewat SourceRevalidator. Penanda segar tetap dipasang agar tidak memicu
+        // penarikan beruntun.
+        Cache::put($freshFlagKey, true, now()->addMinutes((int) config('satudata.swr.fresh_minutes', 20)));
+
+        app(SourceRevalidator::class)->trigger('simantap.aset');
     }
 
     /**
@@ -500,13 +496,12 @@ class SimantapService extends AbstractApiClient
                         continue;
                     }
 
-                    $rName = '';
-                    foreach ($segmen as $bagian) {
-                        if (stripos($bagian, 'ruang') === 0) {
-                            $rName = $bagian;
-                        }
-                    }
-                    if ($rName === '') {
+                    // Nama ruangan adalah segmen keempat lokasi (kampus - gedung -
+                    // lantai - ruangan). Nama yang tidak berawalan "Ruang"
+                    // (mis. "Bed Room 3.5", "Lobby") tetap dipakai apa adanya.
+                    $rName = trim((string) ($segmen[3] ?? ''));
+
+                    if ($rName === '' || $rName === '-') {
                         $rName = 'Ruang tidak diketahui';
                     }
 
@@ -551,7 +546,14 @@ class SimantapService extends AbstractApiClient
                     $words = array_values(array_filter(explode('-', $clean), fn($w) => strlen(trim($w)) > 0));
                     $likePattern = !empty($words) ? ('%' . implode('%', $words) . '%') : '';
 
-                    if (!empty($likePattern)) {
+                    // Cocokkan lewat kolom slug berindeks lebih dulu; LIKE pada
+                    // lokasi_lengkap hanya dipakai bila tidak ada baris yang cocok
+                    // (mis. data lama yang belum punya slug).
+                    $slug = strtoupper($targetId);
+
+                    if ($slug !== '' && (clone $query)->where('ruangan_slug', $slug)->exists()) {
+                        $query->where('ruangan_slug', $slug);
+                    } elseif (!empty($likePattern)) {
                         $query->where(function ($q) use ($targetId, $likePattern) {
                             $q->where('id_ruangan', $targetId)
                               ->orWhere('lokasi_lengkap', 'like', $likePattern);
@@ -610,8 +612,9 @@ class SimantapService extends AbstractApiClient
                 $items = $query->skip(($page - 1) * $perPage)->take($perPage)->get();
 
                 $mapped = $items->map(function ($item) {
-                    $payload = is_array($item->payload) ? $item->payload : (json_decode($item->payload ?? '{}', true) ?: []);
-                    return array_merge([
+                    // Seluruh field diambil dari kolom tabel `asets`; payload JSON tidak
+                    // lagi diikutkan sebagai sumber data.
+                    return [
                         'id_bmn' => $item->id_bmn,
                         'id_satker' => $item->id_satker,
                         'id_kampus' => $item->id_kampus,
@@ -632,7 +635,7 @@ class SimantapService extends AbstractApiClient
                         'nilai_buku' => (float)$item->nilai_buku,
                         'lokasi_lengkap' => $item->lokasi_lengkap,
                         'umur_barang' => $item->umur_barang,
-                    ], $payload);
+                    ];
                 })->toArray();
 
                 return [

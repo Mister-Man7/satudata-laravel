@@ -80,20 +80,16 @@ class AkademikController extends Controller
                     $totalTahun = (int) ($meta['total'] ?? 0);
 
                     if ($totalTahun > 0) {
+                        // API hanya menerbitkan total per angkatan; pembagian per jalur
+                        // seleksi tidak diterbitkan, jadi tidak dikira-kira di sini.
                         $peminatPerJalur[$tahun] = $totalTahun;
-                        $chartPeminat[$tahun] = [
-                            'Seleksi Nasional' => (int) round($totalTahun * 0.60),
-                            'Seleksi Mandiri'  => (int) round($totalTahun * 0.30),
-                            'Lainnya'          => (int) round($totalTahun * 0.10),
-                        ];
                         continue;
                     }
                 } catch (\Throwable $e) {
                 }
 
-                $fallbackTotal = 2300;
-                $peminatPerJalur[$tahun] = $fallbackTotal;
-                $chartPeminat[$tahun] = ['Seleksi Nasional' => 1200, 'Seleksi Mandiri' => 800, 'Lainnya' => 300];
+                // Tidak ada sumber untuk tahun ini, jadi dibiarkan kosong; sebelumnya
+                // diisi angka karangan (2300 dan 1200/800/300).
             }
 
             return [$peminatPerJalur, $chartPeminat];
@@ -109,19 +105,30 @@ class AkademikController extends Controller
             // Pengguna memilih semester secara eksplisit
             $kodeSemesterTampil = $semesterPilihan;
         } else {
-            // Auto-detect semester berjalan dengan cache agar tidak membebani network probe di setiap request
-            $kodeSemesterTampil = Cache::remember('akademik_auto_detected_semester', now()->addHours(6), function () use ($waktuSekarang) {
+            // Deteksi semester berjalan sekali saja, hasilnya di-cache. Data yang kosong
+            // bisa berarti semester itu memang belum terisi ATAU sumber datanya sedang
+            // tidak terjangkau, jadi keputusan pindah ke semester sebelumnya hanya
+            // dikunci lama bila datanya benar-benar ada.
+            $kodeSemesterTampil = Cache::get('akademik_auto_detected_semester');
+
+            if (empty($kodeSemesterTampil)) {
                 $kodeSemesterBerjalan = $waktuSekarang->month < 8
                     ? ($waktuSekarang->year - 1) . '2'
                     : $waktuSekarang->year . '1';
-                $kodeSemesterLalu = $this->semesterSebelumnya($kodeSemesterBerjalan);
 
                 $responseAktifProbe = $this->aktifService->getData(['semester' => $kodeSemesterBerjalan]);
-                if ($this->dataMahasiswaAktifTersedia($responseAktifProbe)) {
-                    return $kodeSemesterBerjalan;
-                }
-                return $kodeSemesterLalu;
-            });
+                $adaData = $this->dataMahasiswaAktifTersedia($responseAktifProbe);
+
+                $kodeSemesterTampil = $adaData
+                    ? $kodeSemesterBerjalan
+                    : $this->semesterSebelumnya($kodeSemesterBerjalan);
+
+                Cache::put(
+                    'akademik_auto_detected_semester',
+                    $kodeSemesterTampil,
+                    $adaData ? now()->addHours(6) : now()->addMinutes(10)
+                );
+            }
         }
 
         $responseAktif = $this->aktifService->getData(['semester' => $kodeSemesterTampil]);
@@ -191,57 +198,67 @@ class AkademikController extends Controller
         $tipePembandingBaru = substr($kodeSemesterPembandingBaru, -1) == '1' ? 'Ganjil' : 'Genap';
         $kodeSemesterPembandingBaruString = $tipePembandingBaru . ' ' . substr($kodeSemesterPembandingBaru, 0, 4);
 
+        $baruTersedia = true;
+
         try {
             $totalBaruSekarang = $this->totalMahasiswaBaru($kodeSemesterTampil);
             $totalBaruLalu = $this->totalMahasiswaBaru($kodeSemesterPembandingBaru);
         } catch (\Throwable $e) {
-            $totalBaruSekarang = 4250;
-            $totalBaruLalu = 4100;
+            // Hitungan gagal berarti datanya tidak tersedia; jangan tulis 0 seolah hasil hitungan.
+            $totalBaruSekarang = 0;
+            $totalBaruLalu = 0;
+            $baruTersedia = false;
         }
 
-        $totalTidakAktifSekarang = 0;
-        $totalTidakAktifLalu = 0;
+        // Intake semester ini umumnya belum tersinkron; angka 0 hampir selalu berarti datanya
+        // belum ada, bukan "tidak ada mahasiswa baru".
+        $baruTersedia = $baruTersedia && $totalBaruSekarang > 0;
 
-        $trendAktif = $this->hitungTrend($totalAktifSekarang, $totalAktifLalu);
-        $trendLulusan = $this->hitungTrend($totalLulusanSekarang, $totalLulusanLalu);
-        $trendBaru = $this->hitungTrend($totalBaruSekarang, $totalBaruLalu);
-        $trendTidakAktif = $this->hitungTrend($totalTidakAktifSekarang, $totalTidakAktifLalu);
+        // Ketersediaan angka: kartu hanya menampilkan nilai bila sumbernya punya baris untuk
+        // semester ini. Bila tidak, nilainya null dan kartu menampilkan "-" (belum ada data).
+        $aktifTersedia = $totalAktifSekarang > 0 || !empty($detailFakultasAktif) || !empty($prodiAktifList);
+        $lulusanTersedia = $totalLulusanSekarang > 0 || !empty($detailFakultasLulus) || !empty($prodiLulusList);
+
+        $trendAktif = $this->badgeTrend($aktifTersedia, (int) $totalAktifSekarang, (int) $totalAktifLalu);
+        $trendLulusan = $this->badgeTrend($lulusanTersedia, (int) $totalLulusanSekarang, (int) $totalLulusanLalu);
+        $trendBaru = $this->badgeTrend($baruTersedia, (int) $totalBaruSekarang, (int) $totalBaruLalu);
 
         $datas = [
             [
                 'title' => 'TOTAL MAHASISWA',
-                'value' => $totalAktifSekarang,
+                'value' => $aktifTersedia ? (int) $totalAktifSekarang : null,
                 'iconClass' => 'fa-regular fa-user',
                 'badgeText' => $trendAktif['text'],
                 'badgeColor' => $trendAktif['color'],
-                'footerText' => "vs Sem. {$kodeSemesterPembandingString}",
+                'footerText' => $aktifTersedia ? "vs Sem. {$kodeSemesterPembandingString}" : 'Belum ada data semester ini',
                 'href' => null,
             ],
             [
+                // Belum ada sumber data untuk mahasiswa nonaktif: tampilkan "-", bukan 0.
                 'title' => 'MAHASISWA NONAKTIF',
-                'value' => $totalTidakAktifSekarang,
+                'value' => null,
                 'iconClass' => 'fa-regular fa-clock',
-                'badgeText' => $trendTidakAktif['text'],
-                'badgeColor' => $trendTidakAktif['color'],
-                'footerText' => "vs Sem. {$kodeSemesterPembandingString}",
+                'badgeText' => null,
+                'badgeColor' => null,
+                'footerText' => 'Belum ada sumber datanya',
                 'href' => null,
             ],
             [
                 'title' => 'MAHASISWA LULUS',
-                'value' => $totalLulusanSekarang,
+                'value' => $lulusanTersedia ? (int) $totalLulusanSekarang : null,
                 'iconClass' => 'fa-solid fa-arrow-up-right-from-square',
                 'badgeText' => $trendLulusan['text'],
                 'badgeColor' => $trendLulusan['color'],
-                'footerText' => "vs Sem. {$kodeSemesterPembandingString}",
+                'footerText' => $lulusanTersedia ? "vs Sem. {$kodeSemesterPembandingString}" : 'Belum ada data semester ini',
                 'href' => route('akademik.mahasiswa-lulus'),
             ],
             [
                 'title' => 'MAHASISWA BARU',
-                'value' => $totalBaruSekarang,
+                'value' => $baruTersedia ? (int) $totalBaruSekarang : null,
                 'iconClass' => 'fa-regular fa-heart',
                 'badgeText' => $trendBaru['text'],
                 'badgeColor' => $trendBaru['color'],
-                'footerText' => "vs Sem. {$kodeSemesterPembandingBaruString}",
+                'footerText' => $baruTersedia ? "vs Sem. {$kodeSemesterPembandingBaruString}" : 'Belum ada data semester ini',
                 'href' => null,
             ],
         ];
@@ -392,15 +409,17 @@ class AkademikController extends Controller
             'datas' => $datas,
             'fakultas' => $fakultas,
             'maxTotalMahasiswa' => $maxTotalMahasiswa > 0 ? $maxTotalMahasiswa : 1,
-            'jurusanTerbanyak' => [
+            // null = belum ada baris untuk semester ini, sehingga kartunya menampilkan "-"
+            // beserta keterangan, bukan 0 dengan nama prodi "-".
+            'jurusanTerbanyak' => $prodiS1Aktif->isEmpty() ? null : [
                 'nama_prodi' => $prodiTerbanyakS1['nama_prodi'],
                 'jumlah_mahasiswa_aktif' => $prodiTerbanyakS1['jumlah_mahasiswa_aktif']
             ],
-            'jurusanSedikit' => [
+            'jurusanSedikit' => $prodiS1Aktif->isEmpty() ? null : [
                 'nama_prodi' => $prodiSedikitS1['nama_prodi'],
                 'jumlah_mahasiswa_aktif' => $prodiSedikitS1['jumlah_mahasiswa_aktif']
             ],
-            'jurusanLulusTerbanyak' => [
+            'jurusanLulusTerbanyak' => $prodiS1Lulus->isEmpty() ? null : [
                 'nama_prodi' => $prodiLulusTerbanyakS1['nama_prodi'],
                 'jumlah_mahasiswa_lulus' => $prodiLulusTerbanyakS1['jumlah_mahasiswa_lulus']
             ],
@@ -452,7 +471,7 @@ class AkademikController extends Controller
 
     /**
      * Hitung jumlah mahasiswa baru pada semester tertentu berdasarkan periode
-     * masuk (payload->periode_masuk), agar trend konsisten dengan semester yang
+     * masuk (kolom `periode_masuk`), agar trend konsisten dengan semester yang
      * dipilih pada filter (bukan berdasarkan angkatan tahunan).
      */
     private function totalMahasiswaBaru(string $kodeSemester): int
@@ -460,13 +479,14 @@ class AkademikController extends Controller
         return Cache::remember("akademik_total_mhs_baru_{$kodeSemester}", now()->addHours(12), function () use ($kodeSemester) {
             try {
                 if (Mahasiswa::exists()) {
-                    return (int) Mahasiswa::where('payload->periode_masuk', $kodeSemester)->count();
+                    // Angka hanya diambil dari kolom `periode_masuk` (berindeks);
+                    // payload JSON tidak dibaca lagi sebagai sumber data.
+                    return (int) Mahasiswa::where('periode_masuk', $kodeSemester)->count();
                 }
             } catch (\Throwable $e) {
             }
 
             $tahun = (int)substr($kodeSemester, 0, 4);
-            $digit = substr($kodeSemester, -1);
 
             try {
                 $apiRes = $this->mahasiswaService->getData(['limit' => 1, 'angkatan' => $tahun]);
@@ -475,16 +495,16 @@ class AkademikController extends Controller
                 $apiTotal = (int) ($meta['total'] ?? 0);
 
                 if ($apiTotal > 0) {
-                    return $digit === '1' ? (int) round($apiTotal * 0.85) : (int) round($apiTotal * 0.15);
+                    // API /v2/mahasiswa memberi total per angkatan, bukan per semester,
+                    // jadi angkanya tidak bisa dipakai untuk semester ini apa adanya.
+                    return 0;
                 }
             } catch (\Throwable $e) {
             }
 
-            if ($digit === '1') {
-                return 4250 + (($tahun - 2024) * 150);
-            } else {
-                return 850 + (($tahun - 2024) * 40);
-            }
+            // Tidak ada sumber resmi untuk semester ini (DB kosong dan API tidak
+            // menerbitkan angka per semester) → nol, bukan angka karangan.
+            return 0;
         });
     }
 
@@ -586,6 +606,26 @@ class AkademikController extends Controller
         return view('academic.mahasiswa-lulus', [
             'title' => 'Mahasiswa Lulus',
         ]);
+    }
+
+    /**
+     * Badge tren hanya bermakna bila kedua sisi punya data. Nilai 0 pada semester ini
+     * sementara pembandingnya berisi biasanya berarti datanya belum masuk — bukan penurunan
+     * nyata — jadi ditulis "Belum ada data", bukan "-100%".
+     *
+     * @return array{text: ?string, color: ?string}
+     */
+    private function badgeTrend(bool $tersedia, int $sekarang, int $lalu): array
+    {
+        if (!$tersedia) {
+            return ['text' => null, 'color' => null];
+        }
+
+        if ($sekarang === 0 && $lalu > 0) {
+            return ['text' => 'Belum ada data', 'color' => 'bg-gray-400'];
+        }
+
+        return $this->hitungTrend($sekarang, $lalu);
     }
 
     private function hitungTrend($current, $previous)

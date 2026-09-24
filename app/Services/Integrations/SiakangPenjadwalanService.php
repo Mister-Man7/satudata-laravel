@@ -57,31 +57,33 @@ class SiakangPenjadwalanService extends SiakangApiClient
             $data = Cache::get($cacheKey);
 
             if (!Cache::has($staleFlagKey) && function_exists('defer')) {
-                defer(function () use ($cacheKey, $staleFlagKey, $params) {
-                    try {
-                        $response = $this->get('/rencana-studi/penjadwalan', $params);
-                        if ($response->success && !empty($response->data)) {
-                            Cache::put($cacheKey, $response->data, now()->addHours(2));
-                        }
-                    } catch (\Throwable $e) {
-                        \Illuminate\Support\Facades\Log::warning('SWR penjadwalan refresh gagal: ' . $e->getMessage());
-                    } finally {
-                        Cache::put($staleFlagKey, true, now()->addMinutes(10));
-                    }
+                defer(function () use ($staleFlagKey, $nip, $semester) {
+                    // PHP tidak dapat menembus Cloudflare, jadi penarikan dialihkan ke
+                    // penarik Chromium lokal (lihat SourceRevalidator).
+                    app(\App\Services\Integrations\SourceRevalidator::class)->trigger('siakang.penjadwalan', [
+                        'nip' => $nip,
+                        'semester' => $semester,
+                    ]);
+
+                    Cache::put($staleFlagKey, true, now()->addMinutes((int) config('satudata.swr.fresh_minutes', 20)));
                 });
             }
 
             return new ApiResponse(success: true, status: 200, message: 'Data penjadwalan', data: $data);
         }
 
-        // 2. API blocking — tidak ada DB lokal untuk data penjadwalan per-NIP
-        $response = $this->get('/rencana-studi/penjadwalan', $params);
+        // 2. Tidak ada cache: API tidak ditunggu di dalam request karena selalu
+        // ditantang Cloudflare. Penarikan dijadwalkan, halaman memakai apa yang ada.
+        app(\App\Services\Integrations\SourceRevalidator::class)->trigger('siakang.penjadwalan', [
+            'nip' => $nip,
+            'semester' => $semester,
+        ]);
 
-        if ($response->success && !empty($response->data)) {
-            Cache::put($cacheKey, $response->data, now()->addHours(2));
-            Cache::put($staleFlagKey, true, now()->addMinutes(10));
-        }
-
-        return $response;
+        return new ApiResponse(
+            success: false,
+            status: 404,
+            message: 'Penjadwalan belum tersedia; penarikan lewat penarik Chromium sedang dijadwalkan.',
+            data: [],
+        );
     }
 }

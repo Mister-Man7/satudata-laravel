@@ -18,7 +18,7 @@ class SyncSippCommand extends Command
                             {--import-portofolio= : Path file/folder/string JSON portofolio (mis. hasil Postman atau ekspor Collection Runner) untuk kolom JSON dosen_sipps}
                             {--portofolio : Simpan daftar publikasi, penelitian, dan pengabdian ke kolom JSON dosen_sipps}
                             {--limit=25 : Jumlah dosen maksimum pada mode --portofolio}
-                            {--halaman=5 : Jumlah halaman maksimum per jenis portofolio}';
+                            {--pages=5 : Jumlah halaman maksimum per jenis portofolio}';
 
     protected $description = 'Sinkronisasi seluruh 7 data kinerja luaran ilmiah SIPP dari API / JSON ke Database MySQL';
 
@@ -196,7 +196,7 @@ class SyncSippCommand extends Command
     private function syncPortofolio(SIPPService $sippService, string $semester, ?string $specificNip): int
     {
         $limit = (int) ($this->option('limit') ?: 25);
-        $maxPages = (int) ($this->option('halaman') ?: 5);
+        $maxPages = (int) ($this->option('pages') ?: 5);
 
         $nipList = $specificNip
             ? collect([$specificNip])

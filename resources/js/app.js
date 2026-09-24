@@ -1,11 +1,13 @@
 import Chart from 'chart.js/auto';
 import {marked} from "marked";
-import Alpine from 'alpinejs';
 
 window.Chart = Chart;
 window.marked = marked;
-window.Alpine = Alpine;
-Alpine.start();
+
+// Alpine TIDAK dijalankan di sini: skrip Livewire sudah membawa Alpine dan mendaftarkan
+// direktif wire:*/x-*/miliknya sebelum menjalankannya. Ketika app.js memanggil
+// Alpine.start() lebih dulu, Alpine menginisialisasi DOM tanpa plugin Livewire — semua
+// wire:model/wire:click jadi mati (mis. filter halaman Mahasiswa Lulus tidak menyaring).
 
 // chart Mahasiswa
 window.initStatistikMahasiswaCharts = function (ChartLibrary) {

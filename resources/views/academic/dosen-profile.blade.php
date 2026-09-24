@@ -47,6 +47,9 @@
              data-semester="{{ $semester }}"
              data-url="{{ route('pegawai.profil-dosen.sync-data', ['nip' => $profile['nip'] ?? '-']) }}"
              data-status-url="{{ route('pegawai.profil-dosen.sync-status', ['nip' => $profile['nip'] ?? '-']) }}"
+             {{-- Halaman dimuat ulang setelah penarikan: semester yang sedang dilihat
+                  dan penanda refresh ikut dibawa, supaya tidak kembali ke semester bawaan. --}}
+             data-refresh-url="{{ url()->current() . '?' . http_build_query(array_merge(request()->query(), ['semester' => $semester, 'refresh' => 1])) }}"
              data-auto="{{ !empty($needsAutoSync) ? '1' : '0' }}"
              data-csrf="{{ csrf_token() }}">
             <div class="flex items-center gap-2 text-sm text-slate-600">
@@ -108,10 +111,6 @@
                                 <div class="font-semibold text-gray-800 text-sm">{{ $jadwal['nama_mk'] }}</div>
                                 <div class="text-xs text-gray-500 mt-0.5">Kls {{ $jadwal['kelas'] }}</div>
                             </div>
-                            @php
-                                $statusBadge = str_contains(strtolower($jadwal['status'] ?? ''), 'terlaksana') ? 'bg-green-500 text-white' : 'bg-red-500 text-white';
-                            @endphp
-                            <span class="shrink-0 inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold {{ $statusBadge }}">{{ $jadwal['status'] ?? 'Terjadwal' }}</span>
                         </div>
                         <div class="flex items-center gap-3 mt-2 text-xs text-gray-500">
                             <span class="inline-flex items-center gap-1"><i class="fa-regular fa-clock"></i> {{ $jadwal['jam'] }} WIB</span>
@@ -669,6 +668,7 @@
             const semester = panel.dataset.semester || '';
             const url = panel.dataset.url;
             const statusUrl = panel.dataset.statusUrl;
+            const refreshUrl = panel.dataset.refreshUrl;
             const csrf = panel.dataset.csrf;
             const tombol = document.getElementById('sync-sipp-button');
             const status = document.getElementById('sync-sipp-status');
@@ -703,12 +703,12 @@
                         }
 
                         writeStatus('Data berhasil diambil. Memuat ulang...', 'text-emerald-600');
-                        window.location.href = window.location.pathname + '?refresh=1';
+                        window.location.href = refreshUrl;
                         return;
                     }
 
                     if (hasil.status === 'gagal') {
-                        writeStatus(hasil.message || 'Penarikan data gagal.', 'text-rose-600');
+                        writeStatus('Penarikan data gagal. Coba lagi nanti.', 'text-rose-600');
                         lockButton(false);
                         return;
                     }
@@ -734,7 +734,7 @@
                     const hasil = await respons.json().catch(() => ({}));
 
                     if (hasil.status === 'diam') {
-                        writeStatus('Data dosen ini baru saja diperbarui.', 'text-slate-500');
+                        writeStatus('Pembaruan baru saja diminta. Tunggu sebentar lagi.', 'text-slate-500');
                         lockButton(false);
                         return;
                     }

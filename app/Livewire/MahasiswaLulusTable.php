@@ -7,6 +7,8 @@ use Illuminate\Contracts\Pagination\LengthAwarePaginator as LengthAwarePaginator
 use Illuminate\Contracts\View\View;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 use Livewire\Attributes\Url;
 use Livewire\Component;
 use Livewire\WithPagination;
@@ -27,13 +29,23 @@ class MahasiswaLulusTable extends Component
     #[Url(except: '')]
     public string $tahun_lulus = '';
 
-    public ?string $toastMessage = null;
-
-    public function terapkanFilter(): void
+    /**
+     * Filter langsung dipakai begitu nilainya berubah (tanpa tombol "Terapkan"), jadi page
+     * hasil di-reset ke 1 setiap kali filter berubah — kalau tidak, pengguna bisa mendarat
+     * di page yang sudah tidak ada. Perubahan page pagination dikecualikan supaya paging
+     * tetap bekerja.
+     */
+    public function updating(string $nama, mixed $nilai): void
     {
-        $this->validate();
+        if (!in_array($nama, ['search', 'kode_prodi', 'angkatan', 'tahun_lulus'], true)) {
+            return;
+        }
+
+        if ($nama === 'search') {
+            $this->validateOnly('search');
+        }
+
         $this->resetPage();
-        $this->toastMessage = 'Berhasil menerapkan filter pencarian mahasiswa lulus';
     }
 
     public function resetFilter(): void
@@ -41,7 +53,6 @@ class MahasiswaLulusTable extends Component
         $this->reset('search', 'kode_prodi', 'angkatan', 'tahun_lulus');
         $this->resetPage();
         $this->resetValidation();
-        $this->toastMessage = 'Berhasil mereset filter pencarian';
     }
 
 
@@ -59,7 +70,75 @@ class MahasiswaLulusTable extends Component
         return view('livewire.mahasiswa-lulus-table', [
             'result' => $hasilApi,
             'mahasiswa' => $this->buatPaginator($dataApi),
+            'pilihanProdi' => $this->pilihanProdi(),
+            'pilihanAngkatan' => $this->pilihanAngkatan(),
+            'pilihanTahunLulus' => $this->pilihanTahunLulus(),
+            'adaFilter' => $this->adaFilter(),
         ]);
+    }
+
+    private function adaFilter(): bool
+    {
+        return $this->search !== ''
+            || $this->kode_prodi !== ''
+            || $this->angkatan !== ''
+            || $this->tahun_lulus !== '';
+    }
+
+    /**
+     * Pilihan isian filter, diambil dari data nyata yang sudah ada.
+     *
+     * Endpoint /v2/mahasiswa/lulusan hanya menghormati search, kode_prodi, angkatan,
+     * dan tahun_lulus: parameter lain (semester, jenjang, fakultas, jenis_kelamin)
+     * diabaikan tanpa pesan, jadi tidak dipakai sebagai filter. Daftar pilihannya
+     * pun bukan karangan — prodi dari tabel `prodis`, angkatan dan tahun lulus dari
+     * kolom yang sudah tersinkron di tabel `mahasiswas`.
+     */
+    private function pilihanProdi(): array
+    {
+        return Cache::remember('filter_lulusan.prodi', now()->addHours(6), function (): array {
+            return DB::table('prodis')
+                ->select('kode_prodi', 'nama_prodi', 'jenjang')
+                ->whereNotNull('kode_prodi')
+                ->orderBy('jenjang')
+                ->orderBy('nama_prodi')
+                ->get()
+                ->map(fn ($prodi) => [
+                    'kode' => (string) $prodi->kode_prodi,
+                    'label' => $prodi->nama_prodi . ' (' . $prodi->kode_prodi . ')',
+                    'kelompok' => strtoupper((string) ($prodi->jenjang ?: 'lainnya')),
+                ])
+                ->all();
+        });
+    }
+
+    private function pilihanAngkatan(): array
+    {
+        return Cache::remember('filter_lulusan.angkatan', now()->addHours(6), function (): array {
+            return DB::table('mahasiswas')
+                ->whereNotNull('angkatan')
+                ->distinct()
+                ->orderByDesc('angkatan')
+                ->pluck('angkatan')
+                ->map(fn ($angkatan) => (string) $angkatan)
+                ->all();
+        });
+    }
+
+    private function pilihanTahunLulus(): array
+    {
+        return Cache::remember('filter_lulusan.tahun_lulus', now()->addHours(6), function (): array {
+            // substr() dipakai, bukan YEAR(), supaya ekspresinya jalan di MySQL maupun
+            // SQLite (tes memakai SQLite).
+            return DB::table('mahasiswas')
+                ->distinct()
+                ->selectRaw('substr(lulus_pada, 1, 4) as tahun')
+                ->whereNotNull('lulus_pada')
+                ->orderByDesc('tahun')
+                ->pluck('tahun')
+                ->map(fn ($tahun) => (string) $tahun)
+                ->all();
+        });
     }
 
     private function parameterApi(): array

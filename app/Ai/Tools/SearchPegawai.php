@@ -56,7 +56,7 @@ class SearchPegawai implements Tool
             ])->values()->all();
 
             return json_encode([
-                'sumber' => 'API SIMPEG UNTIRTA',
+                'sources' => 'API SIMPEG UNTIRTA',
                 'total_ditemukan' => count($mapped),
                 'data_pegawai' => $mapped,
             ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
@@ -87,7 +87,7 @@ class SearchPegawai implements Tool
             ])->all();
 
             return json_encode([
-                'sumber' => 'Database Lokal Pegawais',
+                'sources' => 'Database Lokal Pegawais',
                 'total_ditemukan' => count($mapped),
                 'data_pegawai' => $mapped,
             ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);

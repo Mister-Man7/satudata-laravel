@@ -3,6 +3,9 @@
         {{ $title ?? 'Profil Dosen' }}
     </x-slot:title>
 
+    {{-- Daftar dosen halaman ini bersumber dari SIMPEG. --}}
+    <x-ui.data-freshness sumber="simpeg.pegawai" />
+
     <section class="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
         <!-- Header -->
         <div class="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">

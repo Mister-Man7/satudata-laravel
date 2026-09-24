@@ -55,13 +55,43 @@ class SiakangMataKuliahService extends SiakangApiClient
             return new ApiResponse(success: true, status: 200, message: 'Data mata kuliah', data: $data);
         }
 
-        $response = $this->get($endpoint, $params);
-        if ($response->success && !empty($response->data)) {
-            Cache::put($cacheKey, $response->data, now()->addHours(6));
-            Cache::put($staleFlagKey, true, now()->addMinutes(20));
+        // Cache kosong: API tidak ditunggu di dalam request. Panggilan sinkron di sini bisa
+        // menggantung (Cloudflare) sampai menembus batas waktu PHP dan mematikan halaman,
+        // jadi penyegaran dijadwalkan setelah response dikirim.
+        $this->segarkanDiLatar($cacheKey, $staleFlagKey, fn () => $this->get($endpoint, $params)->data ?? []);
+
+        return new ApiResponse(
+            success: false,
+            status: 404,
+            message: 'Data mata kuliah belum tersedia; penyegaran sedang dijadwalkan.',
+            data: [],
+        );
+    }
+
+    /**
+     * Jalankan penarikan di latar belakang (setelah response terkirim), bukan di dalam request.
+     *
+     * @param  callable(): array<int, mixed>  $ambil
+     */
+    private function segarkanDiLatar(string $cacheKey, string $staleFlagKey, callable $ambil): void
+    {
+        if (!function_exists('defer')) {
+            return;
         }
 
-        return $response;
+        defer(function () use ($cacheKey, $staleFlagKey, $ambil) {
+            try {
+                $fresh = $ambil();
+
+                if (!empty($fresh)) {
+                    Cache::put($cacheKey, $fresh, now()->addHours(6));
+                }
+            } catch (\Throwable $e) {
+                Log::warning('SWR matkul refresh gagal: ' . $e->getMessage());
+            } finally {
+                Cache::put($staleFlagKey, true, now()->addMinutes(20));
+            }
+        });
     }
 
     public function getMataKuliahTingkatUniversitas(array $params = []): ApiResponse
@@ -114,13 +144,10 @@ class SiakangMataKuliahService extends SiakangApiClient
             return $items;
         }
 
-        $items = $this->fetchAllPages($endpoint, $params, $maxPages);
-        if (!empty($items)) {
-            Cache::put($cacheKey, $items, now()->addHours(6));
-            Cache::put($staleFlagKey, true, now()->addMinutes(20));
-        }
+        // Cache kosong: sama seperti di atas, penarikan berjalan di latar belakang.
+        $this->segarkanDiLatar($cacheKey, $staleFlagKey, fn () => $this->fetchAllPages($endpoint, $params, $maxPages));
 
-        return $items;
+        return [];
     }
 
     private function fetchAllPages(string $endpoint, array $params, int $maxPages): array
@@ -176,56 +203,5 @@ class SiakangMataKuliahService extends SiakangApiClient
     public function getAllMataKuliahTingkatProdi(string $kodeProdi): array
     {
         return $this->getAllItems('/v2/mata_kuliah/tingkat-prodi', ['kode_prodi' => $kodeProdi]);
-    }
-
-    /**
-     * Get ALL units / prodi reference list from API /v2/unit.
-     */
-    public function getAllUnits(): array
-    {
-        $cacheKey     = 'siakang.matkul.units';
-        $staleFlagKey = $cacheKey . '.fresh';
-
-        if (Cache::has($cacheKey)) {
-            $data = Cache::get($cacheKey);
-
-            if (!Cache::has($staleFlagKey) && function_exists('defer')) {
-                defer(function () use ($cacheKey, $staleFlagKey) {
-                    try {
-                        $res = $this->get('/v2/unit');
-                        if ($res->success) {
-                            $raw = $res->data ?? [];
-                            $units = isset($raw[0]) && is_array($raw[0])
-                                ? ($raw[0]['data'] ?? $raw[0])
-                                : ($raw['data'] ?? $raw);
-                            if (!empty($units)) {
-                                Cache::put($cacheKey, $units, now()->addHours(6));
-                            }
-                        }
-                    } catch (\Throwable $e) {
-                        Log::warning('SWR units refresh gagal: ' . $e->getMessage());
-                    } finally {
-                        Cache::put($staleFlagKey, true, now()->addMinutes(20));
-                    }
-                });
-            }
-
-            return $data;
-        }
-
-        $res = $this->get('/v2/unit');
-        if (!$res->success) return [];
-
-        $raw   = $res->data ?? [];
-        $units = isset($raw[0]) && is_array($raw[0])
-            ? ($raw[0]['data'] ?? $raw[0])
-            : ($raw['data'] ?? $raw);
-
-        if (!empty($units)) {
-            Cache::put($cacheKey, $units, now()->addHours(6));
-            Cache::put($staleFlagKey, true, now()->addMinutes(20));
-        }
-
-        return $units;
     }
 }

@@ -3,6 +3,9 @@
         {{ $title }}
     </x-slot:title>
 
+    {{-- Data BMN halaman ini ditarik dari SIMANTAP. --}}
+    <x-ui.data-freshness sumber="simantap.aset" />
+
     @php
         $items = collect($bmnList)->values();
         $kondisiMap = config('aset.kondisi', []);

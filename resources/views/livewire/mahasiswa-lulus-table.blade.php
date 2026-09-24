@@ -1,67 +1,83 @@
 <div>
-    <form wire:submit="terapkanFilter" class="mb-6 rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
+    @php
+        $kelasKontrol = 'w-full rounded-xl border border-gray-200 px-4 py-3 text-sm outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-50';
+        $kelasLabel = 'mb-1 block text-xs font-bold uppercase tracking-wide text-gray-500';
+    @endphp
+
+    <div class="mb-6 rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
         <div class="grid grid-cols-1 gap-4 md:grid-cols-4">
             <div>
-                <input type="text" wire:model="search" placeholder="Cari nama / NIM"
-                    class="w-full rounded-xl border border-gray-200 px-4 py-3 text-sm outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-50">
+                <label for="filter-cari" class="{{ $kelasLabel }}">Cari nama / NIM</label>
+                <input id="filter-cari" type="text" wire:model.live.debounce.500ms="search" placeholder="Nama atau NIM" class="{{ $kelasKontrol }}">
                 @error('search')
                     <p class="mt-2 text-xs font-semibold text-red-600">{{ $message }}</p>
                 @enderror
             </div>
 
             <div>
-                <input type="text" wire:model="kode_prodi" placeholder="Kode prodi"
-                    class="w-full rounded-xl border border-gray-200 px-4 py-3 text-sm outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-50">
+                <label for="filter-prodi" class="{{ $kelasLabel }}">Program studi</label>
+                @if (count($pilihanProdi))
+                    <select id="filter-prodi" wire:model.live="kode_prodi" class="{{ $kelasKontrol }}">
+                        <option value="">Semua program studi</option>
+                        @foreach (collect($pilihanProdi)->groupBy('kelompok') as $kelompok => $daftarProdi)
+                            <optgroup label="Jenjang {{ $kelompok }}">
+                                @foreach ($daftarProdi as $prodi)
+                                    <option value="{{ $prodi['kode'] }}">{{ $prodi['label'] }}</option>
+                                @endforeach
+                            </optgroup>
+                        @endforeach
+                    </select>
+                @else
+                    <input id="filter-prodi" type="text" wire:model.live.debounce.500ms="kode_prodi" placeholder="Kode prodi, mis. 3332" class="{{ $kelasKontrol }}">
+                @endif
                 @error('kode_prodi')
                     <p class="mt-2 text-xs font-semibold text-red-600">{{ $message }}</p>
                 @enderror
             </div>
 
             <div>
-                <input type="text" wire:model="angkatan" placeholder="Angkatan"
-                    class="w-full rounded-xl border border-gray-200 px-4 py-3 text-sm outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-50">
+                <label for="filter-angkatan" class="{{ $kelasLabel }}">Angkatan</label>
+                @if (count($pilihanAngkatan))
+                    <select id="filter-angkatan" wire:model.live="angkatan" class="{{ $kelasKontrol }}">
+                        <option value="">Semua angkatan</option>
+                        @foreach ($pilihanAngkatan as $angkatan)
+                            <option value="{{ $angkatan }}">{{ $angkatan }}</option>
+                        @endforeach
+                    </select>
+                @else
+                    <input id="filter-angkatan" type="text" wire:model.live.debounce.500ms="angkatan" placeholder="Tahun angkatan, mis. 2021" class="{{ $kelasKontrol }}">
+                @endif
                 @error('angkatan')
                     <p class="mt-2 text-xs font-semibold text-red-600">{{ $message }}</p>
                 @enderror
             </div>
 
             <div>
-                <input type="text" wire:model="tahun_lulus" placeholder="Tahun lulus"
-                    class="w-full rounded-xl border border-gray-200 px-4 py-3 text-sm outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-50">
+                <label for="filter-tahun-lulus" class="{{ $kelasLabel }}">Tahun lulus</label>
+                @if (count($pilihanTahunLulus))
+                    <select id="filter-tahun-lulus" wire:model.live="tahun_lulus" class="{{ $kelasKontrol }}">
+                        <option value="">Semua tahun</option>
+                        @foreach ($pilihanTahunLulus as $tahun)
+                            <option value="{{ $tahun }}">{{ $tahun }}</option>
+                        @endforeach
+                    </select>
+                @else
+                    <input id="filter-tahun-lulus" type="text" wire:model.live.debounce.500ms="tahun_lulus" placeholder="Tahun lulus, mis. 2025" class="{{ $kelasKontrol }}">
+                @endif
                 @error('tahun_lulus')
                     <p class="mt-2 text-xs font-semibold text-red-600">{{ $message }}</p>
                 @enderror
             </div>
         </div>
 
-        <div class="mt-4 flex flex-col gap-3 sm:flex-row">
-            <button type="submit"
-                class="rounded-xl bg-blue-600 px-5 py-3 text-sm font-bold text-white hover:bg-blue-700 disabled:cursor-wait disabled:opacity-70"
-                wire:loading.attr="disabled">
-                Terapkan Filter
-            </button>
-
+        <div class="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center">
             <button type="button" wire:click="resetFilter"
-                class="rounded-xl border border-gray-200 bg-white px-5 py-3 text-sm font-bold text-gray-700 hover:text-blue-600">
+                class="rounded-xl border border-gray-200 bg-white px-5 py-3 text-sm font-bold text-gray-700 hover:text-blue-600 disabled:cursor-wait disabled:opacity-70"
+                wire:loading.attr="disabled">
                 Reset
-        </div>
-    </form>
-
-    @if ($toastMessage)
-        <div x-data="{ show: true }" x-init="setTimeout(() => show = false, 4000)" x-show="show" x-transition:leave="transition ease-in duration-200 opacity-0 scale-95"
-            class="mb-6 flex items-center justify-between rounded-2xl border border-emerald-200 bg-emerald-50 px-5 py-4 text-emerald-950 shadow-sm">
-            <div class="flex items-center gap-3">
-                <div class="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-emerald-600 text-white">
-                    <i class="fa-solid fa-circle-check text-sm"></i>
-                </div>
-                <span class="text-sm font-bold">{{ $toastMessage }}</span>
-            </div>
-            <button @click="show = false" class="text-emerald-600 hover:text-emerald-800">
-                <i class="fa-solid fa-xmark text-base"></i>
             </button>
         </div>
-    @endif
-
+    </div>
 
     <div wire:loading.delay
         class="mb-6 rounded-2xl border border-blue-100 bg-blue-50 p-4 text-sm font-semibold text-blue-700">
@@ -70,15 +86,30 @@
 
     @if (!$result->success)
         <div role="alert" class="mb-6 rounded-2xl border border-amber-200 bg-amber-50 p-5 text-sm text-amber-800">
-            {{ $result->message ?: 'Data belum dapat dimuat dari SIAKANG. Periksa konfigurasi atau coba kembali beberapa saat lagi.' }}
+            <p class="font-bold">Daftar mahasiswa lulus belum bisa dibaca dari SIAKANG.</p>
+            <p class="mt-1">
+                SIAKANG tidak menyelesaikan permintaan ini. Coba lagi beberapa saat lagi, atau tekan
+                <span class="font-semibold">Tarik dari SIAKANG</span> di panel atas halaman ini.
+            </p>
+            @if ($result->message)
+                <details class="mt-2 text-xs text-amber-700">
+                    <summary class="cursor-pointer font-semibold">Pesan teknis dari sistem sumber</summary>
+                    <p class="mt-1">{{ $result->message }}</p>
+                </details>
+            @endif
         </div>
     @endif
 
     <div class="mb-4 rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
-        <p class="text-sm text-slate-500">Total Data</p>
+        <p class="text-sm text-slate-500">Total mahasiswa lulus</p>
         <h2 class="mt-2 text-3xl font-extrabold text-gray-900">
             {{ number_format($mahasiswa->total(), 0, ',', '.') }}
         </h2>
+        <p class="mt-1 text-xs text-slate-500">
+            {{ $adaFilter
+                ? 'Sesuai filter yang dipilih.'
+                : 'Seluruh lulusan yang tercatat di SIAKANG, semua tahun.' }}
+        </p>
     </div>
 
     <div class="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm" wire:loading.class="opacity-60">
@@ -115,8 +146,18 @@
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="5" class="px-5 py-8 text-center text-gray-500">
-                                Data mahasiswa lulus belum tersedia.
+                            <td colspan="5" class="px-5 py-10 text-center text-gray-500">
+                                @if ($adaFilter)
+                                    <p class="font-semibold text-gray-700">Tidak ada mahasiswa lulus yang cocok dengan filter ini.</p>
+                                    <p class="mt-1">Longgarkan atau reset filternya untuk melihat data lainnya.</p>
+                                    <button type="button" wire:click="resetFilter"
+                                        class="mt-4 rounded-xl border border-gray-200 px-5 py-3 text-sm font-bold text-gray-700 hover:text-blue-600">
+                                        Reset filter
+                                    </button>
+                                @else
+                                    <p class="font-semibold text-gray-700">Belum ada data mahasiswa lulus.</p>
+                                    <p class="mt-1">Tekan "Tarik dari SIAKANG" di panel atas halaman ini, lalu muat ulang.</p>
+                                @endif
                             </td>
                         </tr>
                     @endforelse

@@ -61,4 +61,11 @@ Route::get('/infrastruktur', function () {
 Route::post('/chat', [TirtaAgentController::class, 'chat'])
     ->name('tirta-agent.chat');
 
+// Kesegaran data & pemicu penarikan ulang (dipakai indikator + tombol "Tarik data").
+Route::get('/sumber-data/status', [\App\Http\Controllers\DataSourceController::class, 'index'])
+    ->name('sumber-data.status');
+Route::post('/sumber-data/pemicu', [\App\Http\Controllers\DataSourceController::class, 'trigger'])
+    ->middleware('throttle:10,1')
+    ->name('sumber-data.pemicu');
+
 Route::get('/sipp/publikasi-pegawai', [SIPPController::class, 'getPublikasiByNip']);

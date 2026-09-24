@@ -324,7 +324,8 @@
                                     <td colspan="10" class="px-6 py-12 text-center text-gray-500">
                                         <div class="flex flex-col items-center gap-3">
                                             <i class="fa-solid fa-inbox text-4xl text-gray-300"></i>
-                                            <span class="text-sm">Tidak ada data jadwal untuk unit {{ $unit['kode'] }}</span>
+                                            <span class="text-sm">Belum ada data jadwal untuk unit {{ $unit['kode'] }}</span>
+                                            <span class="text-xs text-gray-400">Datanya akan terisi setelah proses penarikan berhasil.</span>
                                         </div>
                                     </td>
                                 </tr>

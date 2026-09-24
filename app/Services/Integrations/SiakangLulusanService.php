@@ -19,8 +19,8 @@ class SiakangLulusanService extends SiakangApiClient
             'auth_type' => 'bearer_login',
             'token' => config('services.siakang.token'),
             'cf_clearance' => config('services.siakang.cf_clearance'),
-            'connect_timeout' => 5,
-            'timeout' => 15,
+            'connect_timeout' => 3,
+            'timeout' => 8,
         ];
     }
 
@@ -49,20 +49,19 @@ class SiakangLulusanService extends SiakangApiClient
 
         // Cache miss — ambil DB lokal, defer refresh API
         $dbData = $this->hasilFallbackLulusanData($params);
-        if (!empty($dbData['detail_per_prodi'])) {
+        if (!empty($dbData['detail_per_prodi']) || ($dbData['sources'] ?? null) === 'database') {
             Cache::put($cacheKey, $dbData, now()->addHours(6));
-            $this->deferApiRefresh($cacheKey, $staleFlagKey, $params);
 
+            // Tahan penarikan API 20 menit; lihat SiakangMahasiswaAktifService.
+            Cache::put($staleFlagKey, true, now()->addMinutes(20));
             return new ApiResponse(success: true, status: 200, message: 'Data mahasiswa lulus', data: $dbData);
         }
 
-        // Cold start — DB juga kosong, hit API secara synchronous
-        $response = $this->get('/v2/mahasiswa-lulus', $params);
-        if ($response->success && !empty($response->data)) {
-            Cache::put($cacheKey, $response->data, now()->addHours(6));
-            Cache::put($staleFlagKey, true, now()->addMinutes(20));
-            return $response;
-        }
+        // Cold start — DB juga kosong. API tidak pernah ditunggu di dalam request:
+        // penarikan dijadwalkan setelah response dikirim. Sebelumnya panggilan ini
+        // menunggu hingga timeout 15 detik, dan karena satu halaman memanggilnya
+        // untuk beberapa semester, totalnya menembus batas 30 detik PHP.
+        $this->deferApiRefresh($cacheKey, $staleFlagKey, $params);
 
         return new ApiResponse(success: true, status: 200, message: 'Data mahasiswa lulus', data: $dbData);
     }
@@ -73,41 +72,78 @@ class SiakangLulusanService extends SiakangApiClient
             return;
         }
 
-        defer(function () use ($cacheKey, $staleFlagKey, $params) {
-            try {
-                $response = $this->get('/v2/mahasiswa-lulus', $params);
-                if ($response->success && !empty($response->data)) {
-                    Cache::put($cacheKey, $response->data, now()->addHours(6));
-                }
-            } catch (\Throwable $e) {
-                \Illuminate\Support\Facades\Log::warning('SWR lulusan refresh gagal: ' . $e->getMessage());
-            } finally {
-                // Reset fresh flag terlepas dari hasil API, berlaku 20 menit
-                Cache::put($staleFlagKey, true, now()->addMinutes(20));
-            }
+        defer(function () use ($staleFlagKey, $params) {
+            // PHP tidak dapat menembus Cloudflare, jadi penarikan dialihkan ke
+            // penarik Chromium lokal (lihat SourceRevalidator). Semester wajib
+            // dikirim karena skrip penarik menarik data per semester.
+            app(\App\Services\Integrations\SourceRevalidator::class)->trigger('siakang.lulusan', [
+                'semester' => (string) ($params['semester'] ?? ''),
+            ]);
+
+            // Reset fresh flag terlepas dari hasil penarikan, berlaku sesuai config
+            Cache::put($staleFlagKey, true, now()->addMinutes((int) config('satudata.swr.fresh_minutes', 20)));
         });
+    }
+
+    /**
+     * Rentang tanggal satu semester (Gasal: 1 Agustus - 31 Januari, Genap:
+     * 1 Februari - 31 Juli), dipakai untuk menyaring tanggal lulus pada payload.
+     *
+     * @return array{0: string, 1: string}
+     */
+    private function rentangTanggalSemester(string $kodeSemester): array
+    {
+        $tahun = (int) substr($kodeSemester, 0, 4);
+        $jenis = substr($kodeSemester, -1);
+        $tahunBerikut = $tahun + 1;
+
+        if ($tahun === 0) {
+            return ['1970-01-01', '1970-01-01'];
+        }
+
+        return $jenis === '1'
+            ? ["{$tahun}-08-01", "{$tahunBerikut}-01-31"]
+            : ["{$tahunBerikut}-02-01", "{$tahunBerikut}-07-31"];
     }
 
     private function hasilFallbackLulusanData(array $params = []): array
     {
         $parameter = $params;
 
-        $factor = 1.0;
         $semester = (string)($parameter['semester'] ?? '');
-        if (!empty($semester) && strlen($semester) >= 5) {
-            $year = (int)substr($semester, 0, 4);
-            $type = (int)substr($semester, 4, 1);
-            if ($year === 2025) {
-                $factor = $type === 1 ? 0.985 : 1.0;
-            } elseif ($year === 2024) {
-                $factor = $type === 1 ? 0.955 : 0.940;
-            } else {
-                $factor = 0.925;
-            }
+
+        // Utamakan angka hasil tarikan API yang tersimpan di kolom
+        // (tabel siakang_semester_stats diisi scripts/sync-siakang-stat.php).
+        $dariApi = \Illuminate\Support\Facades\DB::table('siakang_semester_stats')
+            ->where('semester', $semester)
+            ->where('jenis', 'lulus')
+            ->get();
+
+        if (!$dariApi->isEmpty()) {
+            $detailProdi = $dariApi->map(fn ($baris) => [
+                'prodi_id' => (string) $baris->prodi_id,
+                'kode_prodi' => (string) $baris->kode_prodi,
+                'nama_prodi' => (string) $baris->nama_prodi,
+                'jenjang' => (string) $baris->jenjang,
+                'fakultas' => $baris->fakultas,
+                'jumlah_mahasiswa_lulus' => (int) $baris->jumlah,
+            ])->all();
+
+            $totalLulusApi = (int) $dariApi->sum('jumlah');
+
+            return [
+                'total_mahasiswa_lulus' => $totalLulusApi,
+                'total' => $totalLulusApi,
+                'detail_per_fakultas' => $dariApi->groupBy('fakultas')->map(fn ($items, $namaFakultas) => [
+                    'nama_fakultas' => $namaFakultas !== '' ? $namaFakultas : '-',
+                    'jumlah_mahasiswa_lulus' => (int) $items->sum('jumlah'),
+                ])->values()->all(),
+                'detail_per_prodi' => $detailProdi,
+                'sources' => 'api',
+            ];
         }
 
-        // Rasio mahasiswa lulus terhadap total mahasiswa (estimasi konservatif)
-        $ratioLulus = 0.148;
+        [$awalSemester, $akhirSemester] = $this->rentangTanggalSemester($semester);
 
         try {
             $prodiList = \Illuminate\Support\Facades\DB::table('prodis')->get();
@@ -119,9 +155,12 @@ class SiakangLulusanService extends SiakangApiClient
                 ];
             }
 
-            // Fast COUNT per prodi — no LIKE scan on JSON payload
+            // Hitung lulusan per prodi dari kolom tanggal berindeks `lulus_pada`
+            // (diisi dari payload saat sinkronisasi). Baris tanpa tanggal lulus
+            // dianggap belum diketahui, jadi tidak dihitung.
             $counts = \Illuminate\Support\Facades\DB::table('mahasiswas')
                 ->select('prodi_id', \Illuminate\Support\Facades\DB::raw('count(*) as total'))
+                ->whereBetween('lulus_pada', [$awalSemester, $akhirSemester])
                 ->groupBy('prodi_id')
                 ->get();
 
@@ -136,7 +175,7 @@ class SiakangLulusanService extends SiakangApiClient
 
                 $pName = $pInfo['nama_prodi'];
                 $namaFak = $this->namaFakultasDariProdi($pName);
-                $jumlah = (int) round($row->total * $ratioLulus * $factor);
+                $jumlah = (int) $row->total;
 
                 if ($jumlah <= 0) continue;
 
@@ -166,6 +205,10 @@ class SiakangLulusanService extends SiakangApiClient
                 'total' => $totalLulus,
                 'detail_per_fakultas' => $detailFakultas,
                 'detail_per_prodi' => array_values($detailProdi),
+                // Penanda bahwa angkanya sudah dijawab database (boleh nol). Tanpa ini
+                // pemanggil menganggapnya "belum ada data" dan menjadwalkan penarikan
+                // API yang tidak perlu.
+                'sources' => 'database',
             ];
         } catch (\Throwable $e) {
             return [
@@ -249,6 +292,10 @@ class SiakangLulusanService extends SiakangApiClient
             if (class_exists(\App\Models\Mahasiswa::class) && \App\Models\Mahasiswa::count() > 0) {
                 $query = \App\Models\Mahasiswa::with('prodi');
 
+                // Daftar ini daftar lulusan, jadi baris tanpa `lulus_pada` tidak ikut
+                // (dulu semua mahasiswa terdaftar di sini).
+                $query->whereNotNull('lulus_pada');
+
                 if ($search !== '') {
                     $query->where(function ($q) use ($search) {
                         $q->where('nama', 'like', "%{$search}%")
@@ -268,44 +315,28 @@ class SiakangLulusanService extends SiakangApiClient
                 }
 
                 if ($tahunLulus !== '') {
-                    $thnInt = (int)$tahunLulus;
-                    $query->where(function ($q) use ($tahunLulus, $thnInt) {
-                        $q->where('angkatan', (string)($thnInt - 4))
-                          ->orWhere('angkatan', (string)($thnInt - 3));
-                    });
+                    // Filter tahun lulus memakai kolom `lulus_pada` (hasil sync). Dulu
+                    // di-approximate dari angkatan (tahun - 4 / - 3), sehingga baris yang
+                    // tampil bisa bukan lulusan tahun yang diminta.
+                    $query->whereBetween('lulus_pada', [$tahunLulus . '-01-01', $tahunLulus . '-12-31']);
                 }
 
                 $total = $query->count();
                 $items = $query->skip(($page - 1) * $limit)->take($limit)->get();
 
                 $mappedItems = $items->map(function ($mhs) {
-                    $tglLulus = data_get($mhs->payload, 'tanggal_lulus') 
-                        ?? data_get($mhs->payload, 'tanggal_ijazah');
-
-                    if (!$tglLulus) {
-                        $tahunMasuk = (int)($mhs->angkatan ?? (substr($mhs->tanggal_masuk ?? '', 0, 4) ?: 2021));
-                        $jenjang = strtolower((string)($mhs->jenjang_id ?? data_get($mhs->payload, 'jenjang_id') ?? 's1'));
-                        $masaStudi = match($jenjang) { 'd3' => 3, 's2' => 2, 's3' => 3, default => 4 };
-                        $thnLulusCalculated = $tahunMasuk + $masaStudi;
-
-                        $bulan = '08';
-                        $tgl = '20';
-                        if ($mhs->tanggal_masuk && strlen($mhs->tanggal_masuk) >= 10) {
-                            $bulan = substr($mhs->tanggal_masuk, 5, 2);
-                            $tgl = substr($mhs->tanggal_masuk, 8, 2);
-                        }
-                        $tglLulus = $thnLulusCalculated . '-' . $bulan . '-' . $tgl;
-                    }
-
                     return [
                         'nim' => $mhs->nim,
                         'nama' => $mhs->nama,
                         'prodi' => [
-                            'nama_prodi' => $mhs->prodi->nama_prodi ?? 'Ilmu Hukum',
-                            'kode_prodi' => $mhs->prodi->kode_prodi ?? 'HKM',
+                            // Nama/kode prodi dari relasi `prodis`; tanpa tebakan.
+                            'nama_prodi' => $mhs->prodi->nama_prodi ?? '-',
+                            'kode_prodi' => $mhs->prodi->kode_prodi ?? '-',
                         ],
-                        'angkatan' => (int)($mhs->angkatan ?? 2025),
-                        'tanggal_lulus' => $tglLulus,
+                        'angkatan' => (int) ($mhs->angkatan ?? 0),
+                        // Tanggal lulus dari kolom `lulus_pada`; bila belum ada tampil
+                        // kosong, tidak dihitung dari angkatan + masa studi.
+                        'tanggal_lulus' => $mhs->lulus_pada,
                     ];
                 })->toArray();
 

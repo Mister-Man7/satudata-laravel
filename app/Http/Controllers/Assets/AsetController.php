@@ -172,19 +172,16 @@ class AsetController extends Controller
     }
 
     /**
-     * Batasi query ke satu kondisi, dicocokkan lewat kode atau labelnya.
+     * Batasi query ke satu kondisi lewat kode numeriknya (mis. 1 = Baik).
+     *
+     * Hanya kolom `kondisi` yang dicocokkan supaya indeks `asets(kondisi)` dan
+     * `asets(id_kampus, kondisi)` dapat dipakai. Mencocokkan `kondisi_text` dengan
+     * OR memaksa pemindaian seluruh tabel, sedangkan datanya selalu sinkron dengan
+     * kodenya (1 = Baik, 3 = Rusak Berat), jadi hasilnya identik.
      */
     protected function scopeKondisi($query, string $kunci)
     {
-        $kondisi = $this->kondisi($kunci);
-
-        return $query->where(function ($q) use ($kondisi) {
-            $q->where('kondisi', $kondisi['kode']);
-
-            if (!empty($kondisi['label'])) {
-                $q->orWhere('kondisi_text', $kondisi['label']);
-            }
-        });
+        return $query->where('kondisi', $this->kondisi($kunci)['kode']);
     }
 
     /**
@@ -210,27 +207,23 @@ class AsetController extends Controller
     }
 
     /**
-     * Nama kampus diambil dari data aset: payload Simantap lalu segmen pertama
-     * `lokasi_lengkap`. Bila keduanya kosong, id kampus dipakai apa adanya.
+     * Nama kampus diambil dari segmen pertama kolom `lokasi_lengkap`
+     * (mis. "Kampus Sindangsari - Asrama Putri - Lantai 3 - Bed Room 3.5").
+     * Bila tidak ada, id kampus dipakai apa adanya. Payload JSON tidak dibaca
+     * sebagai sumber data.
      */
     protected function namaKampusDariData(string $idKampus): string
     {
         $nama = null;
 
         try {
-            $nama = \App\Models\Aset::where('id_kampus', $idKampus)
-                ->whereNotNull('payload')
-                ->value('payload->kampus->nama_kampus');
+            $lokasi = \App\Models\Aset::where('id_kampus', $idKampus)
+                ->whereNotNull('lokasi_lengkap')
+                ->where('lokasi_lengkap', '!=', '-')
+                ->value('lokasi_lengkap');
 
-            if (empty($nama)) {
-                $lokasi = \App\Models\Aset::where('id_kampus', $idKampus)
-                    ->whereNotNull('lokasi_lengkap')
-                    ->where('lokasi_lengkap', '!=', '-')
-                    ->value('lokasi_lengkap');
-
-                if (!empty($lokasi)) {
-                    $nama = trim(explode(' - ', $lokasi)[0]);
-                }
+            if (!empty($lokasi)) {
+                $nama = trim(explode(' - ', $lokasi)[0]);
             }
         } catch (\Throwable $e) {
             $nama = null;
@@ -639,12 +632,11 @@ class AsetController extends Controller
             $first = $bmnList->first();
             $lok = is_array($first) ? ($first['lokasi_lengkap'] ?? '') : ($first->lokasi_lengkap ?? '');
             if (!empty($lok)) {
-                // Nama ruangan diambil dari segmen lokasi yang diawali "Ruang".
-                foreach (array_map('trim', explode(' - ', $lok)) as $bagian) {
-                    if (stripos($bagian, 'ruang') === 0) {
-                        $namaRuangan = $bagian;
-                    }
-                }
+                // Nama ruangan diambil dari segmen keempat lokasi
+                // (kampus - gedung - lantai - ruangan); nama yang tidak berawalan
+                // "Ruang" (mis. "Bed Room 3.5") tetap dipakai apa adanya.
+                $segmen = array_map('trim', explode(' - ', $lok));
+                $namaRuangan = trim((string) ($segmen[3] ?? '')) ?: null;
             }
         }
 
@@ -838,7 +830,7 @@ class AsetController extends Controller
         $masihBerjalan = is_array($status)
             && ($status['status'] ?? '') === 'jalan'
             && isset($status['time'])
-            && now()->diffInMinutes(Carbon::parse($status['time'])) < 15;
+            && Carbon::parse($status['time'])->addMinutes(15)->greaterThanOrEqualTo(now());
 
         if ($masihBerjalan) {
             return response()->json([
@@ -914,6 +906,7 @@ class AsetController extends Controller
             'success' => true,
             'status' => is_array($status) ? ($status['status'] ?? 'belum') : 'belum',
             'has_data' => is_array($status) ? ($status['has_data'] ?? null) : null,
+            'time' => is_array($status) ? ($status['time'] ?? null) : null,
             'message' => is_array($status) ? ($status['message'] ?? '') : '',
             'count' => is_array($status) ? ($status['count'] ?? null) : null,
             'page' => is_array($status) ? ($status['page'] ?? null) : null,

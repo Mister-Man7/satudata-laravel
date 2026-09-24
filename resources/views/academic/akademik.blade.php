@@ -3,6 +3,9 @@
         {{ $title ?? 'Akademik' }}
     </x-slot:title>
 
+    {{-- Statistik mahasiswa halaman ini ditarik dari SIAKANG. --}}
+    <x-ui.data-freshness sumber="siakang.mahasiswa_aktif" />
+
     @php
         $daftarStatistik = $datas ?? [];
     @endphp
@@ -137,41 +140,56 @@
                 </h4>
                 <div>
                     <h4 class="text-sm font-medium text-gray-500 mb-1">Mahasiswa Terbanyak</h4>
-                    <p class="text-4xl font-bold text-gray-900 tracking-tight">
-                        {{ number_format($jurusanTerbanyak['jumlah_mahasiswa_aktif'] ?? 0, 0, ',', '.') }}
-                    </p>
-                    <p class="text-sm mt-2 text-emerald-600 font-medium flex items-center gap-1.5">
-                        <i class="fa-solid fa-arrow-trend-up"></i>
-                        <span class="text-gray-600 truncate" title="{{ $jurusanTerbanyak['nama_prodi'] ?? '-' }}">
-                            {{ $jurusanTerbanyak['nama_prodi'] ?? '-' }}
-                        </span>
-                    </p>
+                    @if(!empty($jurusanTerbanyak))
+                        <p class="text-4xl font-bold text-gray-900 tracking-tight">
+                            {{ number_format($jurusanTerbanyak['jumlah_mahasiswa_aktif'] ?? 0, 0, ',', '.') }}
+                        </p>
+                        <p class="text-sm mt-2 text-emerald-600 font-medium flex items-center gap-1.5">
+                            <i class="fa-solid fa-arrow-trend-up"></i>
+                            <span class="text-gray-600 truncate" title="{{ $jurusanTerbanyak['nama_prodi'] ?? '-' }}">
+                                {{ $jurusanTerbanyak['nama_prodi'] ?? '-' }}
+                            </span>
+                        </p>
+                    @else
+                        <p class="text-4xl font-bold text-gray-400 tracking-tight">-</p>
+                        <p class="text-xs mt-2 text-gray-400">Belum ada data mahasiswa pada semester ini</p>
+                    @endif
                 </div>
                 <div class="border-t border-gray-100"></div>
                 <div>
                     <h4 class="text-sm font-medium text-gray-500 mb-1">Mahasiswa Paling Sedikit</h4>
-                    <p class="text-4xl font-bold text-gray-900 tracking-tight">
-                        {{ number_format($jurusanSedikit['jumlah_mahasiswa_aktif'] ?? 0, 0, ',', '.') }}
-                    </p>
-                    <p class="text-sm mt-2 text-rose-500 font-medium flex items-center gap-1.5">
-                        <i class="fa-solid fa-arrow-trend-down"></i>
-                        <span class="text-gray-600 truncate" title="{{ $jurusanSedikit['nama_prodi'] ?? '-' }}">
-                            {{ $jurusanSedikit['nama_prodi'] ?? '-' }}
-                        </span>
-                    </p>
+                    @if(!empty($jurusanSedikit))
+                        <p class="text-4xl font-bold text-gray-900 tracking-tight">
+                            {{ number_format($jurusanSedikit['jumlah_mahasiswa_aktif'] ?? 0, 0, ',', '.') }}
+                        </p>
+                        <p class="text-sm mt-2 text-rose-500 font-medium flex items-center gap-1.5">
+                            <i class="fa-solid fa-arrow-trend-down"></i>
+                            <span class="text-gray-600 truncate" title="{{ $jurusanSedikit['nama_prodi'] ?? '-' }}">
+                                {{ $jurusanSedikit['nama_prodi'] ?? '-' }}
+                            </span>
+                        </p>
+                    @else
+                        <p class="text-4xl font-bold text-gray-400 tracking-tight">-</p>
+                        <p class="text-xs mt-2 text-gray-400">Belum ada data mahasiswa pada semester ini</p>
+                    @endif
                 </div>
                 <div class="border-t border-gray-100"></div>
                 <div>
                     <h4 class="text-sm font-medium text-gray-500 mb-1">Lulusan Terbanyak</h4>
-                    <p class="text-4xl font-bold text-gray-900 tracking-tight">
-                        {{ number_format($jurusanLulusTerbanyak['jumlah_mahasiswa_lulus'] ?? 0, 0, ',', '.') }}
-                    </p>
-                    <p class="text-sm mt-2 text-blue-500 font-medium flex items-center gap-1.5">
-                        <i class="fa-solid fa-graduation-cap"></i>
-                        <span class="text-gray-600 truncate" title="{{ $jurusanLulusTerbanyak['nama_prodi'] ?? '-' }}">
-                            {{ $jurusanLulusTerbanyak['nama_prodi'] ?? '-' }}
-                        </span>
-                    </p>
+                    @if(!empty($jurusanLulusTerbanyak))
+                        <p class="text-4xl font-bold text-gray-900 tracking-tight">
+                            {{ number_format($jurusanLulusTerbanyak['jumlah_mahasiswa_lulus'] ?? 0, 0, ',', '.') }}
+                        </p>
+                        <p class="text-sm mt-2 text-blue-500 font-medium flex items-center gap-1.5">
+                            <i class="fa-solid fa-graduation-cap"></i>
+                            <span class="text-gray-600 truncate" title="{{ $jurusanLulusTerbanyak['nama_prodi'] ?? '-' }}">
+                                {{ $jurusanLulusTerbanyak['nama_prodi'] ?? '-' }}
+                            </span>
+                        </p>
+                    @else
+                        <p class="text-4xl font-bold text-gray-400 tracking-tight">-</p>
+                        <p class="text-xs mt-2 text-gray-400">Belum ada data lulusan pada semester ini</p>
+                    @endif
                 </div>
 
             </div>

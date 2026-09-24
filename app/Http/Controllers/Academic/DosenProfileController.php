@@ -239,32 +239,10 @@ class DosenProfileController extends Controller
         try {
             $dbPegawai = \App\Models\Pegawai::where('nip', trim($nip))->first();
             if ($dbPegawai) {
-                $dbItem = null;
-                if (is_array($dbPegawai->payload) && !empty($dbPegawai->payload)) {
-                    $dbItem = $this->pegawaiService->normalizePegawaiItem($dbPegawai->payload);
-                } else {
-                    $dbItem = [
-                        'nip'                  => $dbPegawai->nip,
-                        'kd_pegawai'           => $dbPegawai->kode_data,
-                        'nama'                 => $dbPegawai->nama,
-                        'namaPegawai'          => $dbPegawai->nama,
-                        'nama_pegawai_lengkap' => trim(($dbPegawai->gelar_depan ? $dbPegawai->gelar_depan . ' ' : '') . $dbPegawai->nama . ($dbPegawai->gelar_belakang ? ', ' . $dbPegawai->gelar_belakang : '')),
-                        'gelar_depan'          => $dbPegawai->gelar_depan,
-                        'gelar_belakang'       => $dbPegawai->gelar_belakang,
-                        'email'                => $dbPegawai->email,
-                        'emailPegawai'         => $dbPegawai->email,
-                        'noTlp'                => $dbPegawai->no_tlp,
-                        'unitKerja'            => $dbPegawai->unit_kerja,
-                        'unit_kerja'           => $dbPegawai->unit_kerja,
-                        'jabatan'              => $dbPegawai->jabatan,
-                        'nama_jabatan'         => $dbPegawai->jabatan,
-                        'pangkat'              => $dbPegawai->pangkat,
-                        'statusKerja'          => $dbPegawai->status_kerja,
-                        'nama_stspegawai'      => $dbPegawai->status_kerja,
-                        'levelPegawai'         => $dbPegawai->level_pegawai,
-                        'nama_level_pegawai'   => $dbPegawai->level_pegawai,
-                    ];
-                }
+                // Seluruh nilai dari kolom tabel `pegawais`; payload JSON tidak dipakai.
+                $dbItem = $this->pegawaiService->normalizePegawaiItem(
+                    $this->pegawaiService->mapDbPegawaiToItem($dbPegawai)
+                );
 
                 if ($dbItem) {
                     Cache::put($cacheKey, $dbItem, now()->addMinutes(10));
@@ -367,20 +345,11 @@ class DosenProfileController extends Controller
             return $cached;
         }
 
-        // 1. Baca salinan lokal dari database.
+        // 1. Baca salinan lokal dari tabel `dosen_jadwals` (per baris, bukan JSON).
         try {
-            $dbItems = \App\Models\DosenSipp::where('nip', trim($nip))
-                ->where('semester', $semester)
-                ->value('penjadwalan');
+            $dbItems = $this->scheduleFromDatabase($nip, $semester);
 
-            if (empty($dbItems)) {
-                $dbItems = \App\Models\DosenSipp::where('nip', trim($nip))
-                    ->whereNotNull('penjadwalan')
-                    ->latest()
-                    ->value('penjadwalan');
-            }
-
-            if (is_array($dbItems) && !empty($dbItems)) {
+            if (!empty($dbItems)) {
                 Cache::put($cacheKey, $dbItems, now()->addHours(6));
 
                 // 2. Revalidasi background ke API SIAKANG (tidak menahan render halaman).
@@ -403,6 +372,81 @@ class DosenProfileController extends Controller
      *
      * @return array<int, array<string, mixed>>
      */
+    /**
+     * Susun penjadwalan dosen dari tabel `dosen_jadwals` menjadi struktur yang
+     * dipakai view (mata kuliah -> jadwal -> waktu kuliah), tanpa membaca JSON.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    private function scheduleFromDatabase(string $nip, string $semester): array
+    {
+        $rows = \Illuminate\Support\Facades\DB::table('dosen_jadwals')
+            ->where('nip', trim($nip))
+            ->where('semester', $semester)
+            ->orderBy('mata_kuliah_nama')
+            ->orderBy('kode_jadwal')
+            ->orderBy('hari_numeric')
+            ->orderBy('jam_mulai')
+            ->get();
+
+        if ($rows->isEmpty()) {
+            return [];
+        }
+
+        $perMataKuliah = [];
+
+        foreach ($rows as $row) {
+            $kunciMk = (string) $row->mata_kuliah_kode . '|' . (string) $row->mata_kuliah_nama;
+
+            if (!isset($perMataKuliah[$kunciMk])) {
+                $perMataKuliah[$kunciMk] = [
+                    'mata_kuliah' => [
+                        'kode' => $row->mata_kuliah_kode,
+                        'nama' => $row->mata_kuliah_nama,
+                        'sks'  => (int) $row->mata_kuliah_sks,
+                    ],
+                    'jadwal' => [],
+                ];
+            }
+
+            $kunciJadwal = (string) ($row->kode_jadwal ?: $row->jadwal_id);
+
+            if (!isset($perMataKuliah[$kunciMk]['jadwal'][$kunciJadwal])) {
+                $perMataKuliah[$kunciMk]['jadwal'][$kunciJadwal] = [
+                    'kode_jadwal' => $row->kode_jadwal,
+                    'kelas' => $row->kelas !== null ? [['nama_kelas' => $row->kelas]] : [],
+                    'mode' => $row->mode,
+                    'waktu_kuliah' => [],
+                ];
+            }
+
+            $perMataKuliah[$kunciMk]['jadwal'][$kunciJadwal]['waktu_kuliah'][] = [
+                'hari' => $row->hari,
+                'hari_numeric' => (int) $row->hari_numeric,
+                'jam_mulai' => $row->jam_mulai,
+                'jam_selesai' => $row->jam_selesai,
+                'ruang' => ['nama_ruang' => $row->nama_ruang],
+            ];
+        }
+
+        return array_values(array_map(function (array $mk) {
+            $mk['jadwal'] = array_values($mk['jadwal']);
+
+            return $mk;
+        }, $perMataKuliah));
+    }
+
+    /**
+     * Simpan hasil tarikan API ke tabel `dosen_jadwals`. Logikanya ada di
+     * App\Services\Sync\LecturerScheduleWriter supaya sama dengan skrip CLI.
+     *
+     * @param  array<int, array<string, mixed>>  $items
+     */
+    private function storeScheduleInDatabase(string $nip, string $semester, array $items): void
+    {
+        \App\Services\Sync\LecturerScheduleWriter::store($nip, $semester, $items);
+    }
+
     private function syncPenjadwalanFromApi(string $nip, string $semester, string $cacheKey): array
     {
         try {
@@ -417,10 +461,7 @@ class DosenProfileController extends Controller
 
                 if (!empty($items)) {
                     try {
-                        \App\Models\DosenSipp::updateOrCreate(
-                            ['nip' => trim($nip), 'semester' => $semester],
-                            ['penjadwalan' => array_values($items)]
-                        );
+                        $this->storeScheduleInDatabase($nip, $semester, $items);
                     } catch (\Throwable $e) {
                         Log::warning("Gagal simpan penjadwalan dosen {$nip} ke database: " . $e->getMessage());
                     }
@@ -588,7 +629,6 @@ class DosenProfileController extends Controller
                             'jam'     => ($waktu['jam_mulai'] ?? '-') . ' - ' . ($waktu['jam_selesai'] ?? '-'),
                             'ruang'   => $ruang,
                             'mode'    => $jadwal['mode'] ?? '-',
-                            'status'  => $jadwal['status'] ?? '-',
                         ];
                     }
                 }
@@ -688,7 +728,7 @@ class DosenProfileController extends Controller
             $result[] = [
                 'judul'             => $item['judul_portofolio'] ?? $item['judul'] ?? $item['title'] ?? '-',
                 'penulis'           => !empty($penulisList) ? $penulisList : ($item['penulis'] ?? $item['authors'] ?? '-'),
-                'journal'           => $detail['nama_jurnal'] ?? $detail['penerbit'] ?? $item['nama_jurnal'] ?? $item['journal'] ?? $item['sumber'] ?? '-',
+                'journal'           => $detail['nama_jurnal'] ?? $detail['penerbit'] ?? $item['nama_jurnal'] ?? $item['journal'] ?? $item['sources'] ?? '-',
                 'penerbit'          => $detail['penerbit'] ?? $item['penerbit'] ?? '-',
                 'tahun'             => $this->extractYear($item),
                 'tipe'              => $detail['jenis_publikasi'] ?? $item['jenis_portofolio'] ?? $item['tipe'] ?? '-',
@@ -816,7 +856,7 @@ class DosenProfileController extends Controller
             return response()->json([
                 'success' => true,
                 'status' => 'diam',
-                'message' => 'Data dosen ini baru saja diperbarui.',
+                'message' => 'Pembaruan baru saja diminta. Tunggu sebentar lagi.',
             ]);
         }
 

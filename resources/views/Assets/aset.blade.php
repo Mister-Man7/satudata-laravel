@@ -3,6 +3,12 @@
         {{ $title }}
     </x-slot:title>
 
+    {{-- Level kampus sudah punya kotak penyegaran aset sendiri, jadi baris kesegaran
+         SIMANTAP ini hanya perlu di level gedung/ruangan yang tidak punya tombol itu. --}}
+    @if(($level ?? 'kampus') !== 'kampus')
+        <x-ui.data-freshness sumber="simantap.aset" />
+    @endif
+
     {{-- Breadcrumb Navigation (For Gedung and Ruangan levels) --}}
     @if(($level ?? 'kampus') !== 'kampus')
         <nav class="mb-5 flex items-center gap-2 text-xs sm:text-sm font-medium text-gray-500" aria-label="Breadcrumb">
@@ -42,6 +48,13 @@
          Penarikan dijalankan host aplikasi memakai Chromium lokal (satu-satunya klien
          yang lolos Cloudflare dari server); kredensial SIMANTAP tetap di .env server. --}}
     @if(($level ?? 'kampus') === 'kampus')
+        @php
+            // Kalimat dan label tombol dibaca dari config/satudata.php supaya seragam
+            // dengan panel kesegaran data di halaman lain.
+            $sumberAset = (array) (config('satudata.sources')['simantap.aset'] ?? []);
+            $keteranganAset = (string) ($sumberAset['keterangan'] ?? 'Data aset dan total unit dibaca dari database SATUDATA.');
+            $labelTarikAset = ($sumberAset['sistem'] ?? '') !== '' ? 'Tarik dari ' . $sumberAset['sistem'] : 'Tarik data aset';
+        @endphp
         <div id="sync-aset"
              class="mb-6 rounded-2xl border border-slate-100 bg-slate-50/70 px-4 py-3 flex flex-wrap items-center gap-3"
              data-url="{{ route('aset.sync-data') }}"
@@ -49,14 +62,14 @@
              data-csrf="{{ csrf_token() }}">
             <div class="flex items-center gap-2 text-sm text-slate-600">
                 <i class="fa-solid fa-database text-slate-400"></i>
-                <span>Data aset dan total unit dibaca dari database SATUDATA hasil sinkronisasi SIMANTAP.</span>
+                <span>{{ $keteranganAset }}</span>
             </div>
             <div class="flex-1"></div>
             <span id="sync-aset-status" class="text-xs text-slate-500"></span>
             <button type="button" id="sync-aset-button"
                     class="inline-flex items-center gap-2 rounded-lg bg-cyan-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-cyan-700 transition-colors disabled:opacity-50 disabled:pointer-events-none">
                 <i class="fa-solid fa-rotate text-[11px]"></i>
-                <span>Tarik data aset</span>
+                <span>{{ $labelTarikAset }}</span>
             </button>
         </div>
     @endif
@@ -71,7 +84,7 @@
 
     @if(($level ?? 'kampus') === 'kampus')
         <script>
-            // Tombol "Tarik data aset": meminta server menyegarkan data BMN dari SIMANTAP
+            // Tombol di kotak penyegaran aset: meminta server menyegarkan data BMN dari SIMANTAP
             // (Chromium lokal di host aplikasi) lalu memantau statusnya. Operator tidak
             // mengisi kredensial atau token apa pun.
             (function () {
@@ -92,6 +105,33 @@
                     return respons.ok ? respons.json() : { status: 'belum', message: '' };
                 }
 
+                // Kesegaran data ditampilkan sejak halaman dibuka, bukan hanya saat tombol ditekan,
+                // supaya kotak ini sama informatifnya dengan panel di halaman lain.
+                async function tulisStatusAwal() {
+                    let hasil;
+
+                    try { hasil = await checkStatus(); } catch (e) { return; }
+
+                    if (hasil.status === 'selesai') {
+                        writeStatus(hasil.time ? 'Terakhir diperbarui ' + hasil.time : 'Data sudah diperbarui.', 'text-emerald-600');
+                        return;
+                    }
+
+                    if (hasil.status === 'jalan') {
+                        writeStatus('Sedang memperbarui data aset...', 'text-slate-500');
+                        return;
+                    }
+
+                    if (hasil.status === 'gagal') {
+                        writeStatus('Pembaruan data aset gagal. Coba lagi nanti.', 'text-rose-600');
+                        return;
+                    }
+
+                    writeStatus('Data belum pernah diperbarui', 'text-slate-500');
+                }
+
+                tulisStatusAwal();
+
                 async function pantau(batasDetik) {
                     const mulai = Date.now();
 
@@ -103,23 +143,23 @@
 
                         if (hasil.status === 'selesai') {
                             if (hasil.has_data === false) {
-                                writeStatus(hasil.message || 'Tidak ada data aset baru pada sesi ini.', 'text-slate-500');
+                                writeStatus('Tidak ada data baru pada sesi ini.', 'text-slate-500');
                                 lockButton(false);
                                 return;
                             }
 
-                            writeStatus(hasil.message || 'Data aset berhasil disegarkan. Memuat ulang...', 'text-emerald-600');
+                            writeStatus('Data aset berhasil diperbarui. Memuat ulang...', 'text-emerald-600');
                             window.location.reload();
                             return;
                         }
 
                         if (hasil.status === 'gagal') {
-                            writeStatus(hasil.message || 'Penyegaran data aset gagal.', 'text-rose-600');
+                            writeStatus('Pembaruan data aset gagal. Coba lagi nanti.', 'text-rose-600');
                             lockButton(false);
                             return;
                         }
 
-                        writeStatus('Sedang menyegarkan data aset dari SIMANTAP...', 'text-slate-500');
+                        writeStatus('Sedang memperbarui data aset...', 'text-slate-500');
                     }
 
                     writeStatus('Masih berjalan. Muat ulang halaman sebentar lagi untuk melihat hasilnya.', 'text-amber-600');
@@ -140,13 +180,13 @@
                         const hasil = await respons.json().catch(() => ({}));
 
                         if (hasil.status === 'diam') {
-                            writeStatus('Data aset baru saja disegarkan.', 'text-slate-500');
+                            writeStatus('Pembaruan baru saja diminta. Tunggu sebentar lagi.', 'text-slate-500');
                             lockButton(false);
                             return;
                         }
 
                         if (!respons.ok && respons.status !== 202) {
-                            writeStatus(hasil.message || ('Permintaan penyegaran gagal (HTTP ' + respons.status + ').'), 'text-rose-600');
+                            writeStatus('Permintaan pembaruan gagal. Coba lagi nanti.', 'text-rose-600');
                             lockButton(false);
                             return;
                         }
@@ -154,7 +194,7 @@
                         writeStatus('Penyegaran dimulai...', 'text-slate-500');
                         await pantau(240);
                     } catch (e) {
-                        writeStatus('Gagal menghubungi server: ' + e.message, 'text-rose-600');
+                        writeStatus('Gagal menghubungi server. Coba lagi nanti.', 'text-rose-600');
                         lockButton(false);
                     }
                 });

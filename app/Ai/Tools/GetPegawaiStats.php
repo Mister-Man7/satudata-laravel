@@ -53,7 +53,7 @@ class GetPegawaiStats implements Tool
         }
 
         return json_encode([
-            'sumber' => 'API SIMPEG / DB Pegawai UNTIRTA',
+            'sources' => 'API SIMPEG / DB Pegawai UNTIRTA',
             'total_pegawai' => count($allPegawai),
             'total_dosen' => count($allDosen),
             'total_tendik_staff' => max(0, count($allPegawai) - count($allDosen)),

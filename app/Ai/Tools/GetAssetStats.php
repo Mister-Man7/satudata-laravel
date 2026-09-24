@@ -31,7 +31,7 @@ class GetAssetStats implements Tool
         }
 
         return json_encode([
-            'sumber' => 'API SIMANTAP / Database BMN Aset UNTIRTA',
+            'sources' => 'API SIMANTAP / Database BMN Aset UNTIRTA',
             'total_aset_bmn' => $totalAset,
             'total_lokasi_kampus' => count($kampusList),
             'daftar_kampus' => $kampusList,
